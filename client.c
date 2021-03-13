@@ -7,7 +7,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
-#define PORT 4000
+#include "config.h"
 
 int main(int argc, char *argv[])
 {

@@ -13,8 +13,7 @@
 #include "exit_errors.h"
 #include "logger.h"
 
-#define PORT 4000
-#define CONNECTIONS_TO_ACCEPT 5
+#include "config.h"
 
 #define FALSE 0
 #define TRUE 1
