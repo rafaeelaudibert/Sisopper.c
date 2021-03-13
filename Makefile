@@ -31,5 +31,9 @@ chained_list.o: chained_list.c
 	${CC} ${FLAGS} -c chained_list.c
 
 # Utilities
+logger.o: logger.c
+	${CC} ${FLAGS} -c logger.c
+
+# Clear
 clear:
 	rm ${BIN_FOLDER}/server ${BIN_FOLDER}/client *.o
