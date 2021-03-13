@@ -93,6 +93,10 @@ int logger_info(char *fmt, ...)
 
 int logger_debug(char *fmt, ...)
 {
+#ifdef NO_DEBUG
+    return 0;
+#endif
+
     int ret;
     va_list myargs;
 

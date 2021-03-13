@@ -8,6 +8,9 @@ CLIENT_BIN=${BIN_FOLDER}/client
 all: server client
 	- echo "Done!"
 
+release: FLAGS += -D NO_DEBUG
+release: all
+
 # Server related
 server: server.o chained_list.o logger.o
 	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o
