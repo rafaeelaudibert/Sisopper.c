@@ -22,9 +22,13 @@ client: client.o
 client.o:
 	${CC} ${FLAGS} -c client.c
 
-# Hash table
+# Hash table Data Structure
 hash.o: hash.c
 	${CC} ${FLAGS} -c hash.c
+
+# Chained List Data Structure
+chained_list.o: chained_list.c
+	${CC} ${FLAGS} -c chained_list.c
 
 # Utilities
 clear:
