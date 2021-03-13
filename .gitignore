@@ -1,0 +1,5 @@
+*.o
+*.out
+
+bin/client
+bin/server
