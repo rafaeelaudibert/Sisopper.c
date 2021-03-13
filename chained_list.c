@@ -48,6 +48,9 @@ CHAINED_LIST *chained_list_append_end(CHAINED_LIST *list, void *val)
 {
     CHAINED_LIST *new_list = chained_list_create(val);
 
+    if (!list)
+        return new_list;
+
     CHAINED_LIST *end_list = list;
     while (end_list->next)
         end_list = end_list->next;
@@ -75,6 +78,7 @@ void chained_list_free(CHAINED_LIST *list)
 /// Prints a chained list
 ///
 /// @param list A CHAINED_LIST* to be printed
+/// @param item_print_function A function which receives each item val, to handle how to print the val
 void chained_list_print(CHAINED_LIST *list, void (*item_print_function)(void *))
 {
     printf("[");
@@ -87,4 +91,17 @@ void chained_list_print(CHAINED_LIST *list, void (*item_print_function)(void *))
         list = list->next;
     }
     printf("]\n");
+}
+
+/// Iterates over a list
+///
+/// @param list A CHAINED_LIST* to be printed
+/// @param iterate_function A function which is called for every value in the list
+void chained_list_iterate(CHAINED_LIST *list, void (*iterate_function)(void *))
+{
+    while (list)
+    {
+        iterate_function(list->val);
+        list = list->next;
+    }
 }
