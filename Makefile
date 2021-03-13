@@ -1,5 +1,5 @@
 CC=gcc
-FLAGS=-Wall -O2 -g
+FLAGS=-Wall -O2 -g -pthread
 
 BIN_FOLDER=./bin
 SERVER_BIN=${BIN_FOLDER}/server
@@ -9,8 +9,8 @@ all: server client
 	- echo "Done!"
 
 # Server related
-server: server.o
-	${CC} ${FLAGS} -o ${SERVER_BIN} server.o
+server: server.o chained_list.o logger.o
+	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o
 
 server.o:
 	${CC} ${FLAGS} -c server.c
