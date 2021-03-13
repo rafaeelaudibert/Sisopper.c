@@ -20,7 +20,7 @@ static int keep_running = TRUE;
 
 void sigint_handler(int _sigint)
 {
-    logger_warn("SIGINT received, closing descriptors and finishing...");
+    logger_warn("SIGINT received, closing descriptors and finishing...\n");
     keep_running = FALSE;
 }
 
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        logger_error("Opening socket");
+        logger_error("On opening socket\n");
         exit(ERROR_OPEN_SOCKET);
     }
 
@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        logger_error("Binding socket");
+        logger_error("On binding socket\n");
         exit(ERROR_BINDING_SOCKET);
     }
 
@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
 
     if ((newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen)) == -1)
     {
-        logger_error("On accept");
+        logger_error("On accept\n");
         exit(ERROR_ACCEPTING_CONNECTION);
     }
 
@@ -73,11 +73,11 @@ int main(int argc, char *argv[])
         n = read(newsockfd, buffer, 256);
         if (n < 0 && keep_running)
         {
-            logger_error("reading from socket");
+            logger_error("On reading from socket\n");
         }
         else if (n == 0)
         {
-            logger_info("Not read anything, connection should have been closed then");
+            logger_info("Not read anything, connection should have been closed then\n");
             keep_running = FALSE;
         }
         else
@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
             /* write the ack in the socket */
             n = write(newsockfd, "I got your message", 18);
             if (n < 0)
-                logger_error("writing to socket");
+                logger_error("On writing to socket\n");
         }
     }
     close(newsockfd);
