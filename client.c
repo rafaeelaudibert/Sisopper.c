@@ -10,6 +10,9 @@
 #include "config.h"
 #include "exit_errors.h"
 #include "logger.h"
+#include "packet.h"
+
+int GLOBAL_ID = 0;
 
 int main(int argc, char *argv[])
 {
@@ -64,26 +67,29 @@ int main(int argc, char *argv[])
         exit(ERROR_STARTING_CONNECTION);
     }
 
-    char buffer[256];
+    char buffer[MAX_MESSAGE_SIZE + 2];
     while (1)
     {
-        printf("Enter the message: ");
-        bzero(buffer, 256);
-        fgets(buffer, 256, stdin);
+        // TODO: Configure so that if the person enters more than 128 characters,
+        // it doesn't send as the next text message automatically
+        printf("💬 Enter the message: ");
+        bzero(buffer, MAX_MESSAGE_SIZE + 2);
+        fgets(buffer, MAX_MESSAGE_SIZE, stdin);
+        buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
 
         /* write in the socket */
         n = write(sockfd, buffer, strlen(buffer));
         if (n < 0)
             logger_error("On writing to socket\n");
 
-        bzero(buffer, 256);
+        bzero(buffer, MAX_MESSAGE_SIZE + 2);
 
         /* read from the socket */
-        n = read(sockfd, buffer, 256);
+        n = read(sockfd, buffer, MAX_MESSAGE_SIZE);
         if (n < 0)
             logger_error("On reading from socket\n");
 
-        printf("%s\n", buffer);
+        logger_debug("ACK: %s\n", buffer);
     }
 
     close(sockfd);

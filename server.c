@@ -18,8 +18,6 @@
 #define FALSE 0
 #define TRUE 1
 
-#define BUFFER_SIZE 5
-
 static int received_sigint = FALSE;
 
 void *handle_connection(void *);
@@ -105,16 +103,16 @@ cleanup:
 
 void *handle_connection(void *void_sockfd)
 {
-    char buffer[BUFFER_SIZE];
+    char buffer[MAX_MESSAGE_SIZE + 2];
     int n, sockfd = *((int *)void_sockfd);
 
     logger_debug("[Socket %d] Hello from new thread to handle connection\n", sockfd);
     while (!received_sigint)
     {
-        bzero(buffer, BUFFER_SIZE);
+        bzero(buffer, MAX_MESSAGE_SIZE + 2);
 
         /* read from the socket */
-        n = read(sockfd, buffer, BUFFER_SIZE);
+        n = read(sockfd, buffer, MAX_MESSAGE_SIZE + 2);
         if (n < 0 && !received_sigint)
         {
             logger_error("[Socket %d] On reading from socket\n", sockfd);
@@ -126,7 +124,7 @@ void *handle_connection(void *void_sockfd)
         }
         else
         {
-            logger_info("[Socket %d] Here is the message: %s", sockfd, buffer);
+            logger_info("[Socket %d] Here is the message: %s\n", sockfd, buffer);
 
             /* write the ack in the socket */
             n = write(sockfd, "I got your message", 18);
@@ -179,6 +177,7 @@ void handle_signals(void)
 
 void *handle_eof(void *arg)
 {
+    const char BUFFER_SIZE = 100;
     char *buffer = (char *)malloc(sizeof(char) * BUFFER_SIZE);
     while (fgets(buffer, BUFFER_SIZE - 2, stdin))
     {
