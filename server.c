@@ -12,6 +12,7 @@
 #include "chained_list.h"
 #include "exit_errors.h"
 #include "logger.h"
+#include "packet.h"
 
 #include "config.h"
 
@@ -103,33 +104,33 @@ cleanup:
 
 void *handle_connection(void *void_sockfd)
 {
-    char buffer[MAX_MESSAGE_SIZE + 2];
-    int n, sockfd = *((int *)void_sockfd);
+    PACKET packet;
+    int bytes_read, sockfd = *((int *)void_sockfd);
 
     logger_debug("[Socket %d] Hello from new thread to handle connection\n", sockfd);
     while (!received_sigint)
     {
-        bzero(buffer, MAX_MESSAGE_SIZE + 2);
+        bzero((void *)&packet, sizeof(PACKET));
 
         /* read from the socket */
-        n = read(sockfd, buffer, MAX_MESSAGE_SIZE + 2);
-        if (n < 0 && !received_sigint)
+        bytes_read = read(sockfd, (void *)&packet, sizeof(PACKET));
+        if (bytes_read < 0 && !received_sigint)
         {
             logger_error("[Socket %d] On reading from socket\n", sockfd);
         }
-        else if (n == 0)
+        else if (bytes_read == 0)
         {
             logger_info("[Socket %d] Connection closed\n", sockfd);
             return NULL;
         }
         else
         {
-            logger_info("[Socket %d] Here is the message: %s\n", sockfd, buffer);
+            logger_info("[Socket %d] Here is the message: %s\n", sockfd, packet.payload);
 
             /* write the ack in the socket */
-            n = write(sockfd, "I got your message", 18);
-            if (n < 0)
-                logger_error("[Socket %d] On writing to socket\n", sockfd);
+            bytes_read = write(sockfd, "I got your message", 18);
+            if (bytes_read < 0)
+                logger_error("[Socket %d] On writing ACK to socket\n", sockfd);
         }
     };
 

@@ -16,7 +16,7 @@ int GLOBAL_ID = 0;
 
 int main(int argc, char *argv[])
 {
-    int sockfd, n;
+    int sockfd, bytes_read;
     struct sockaddr_in serv_addr;
 
     if (argc < 2)
@@ -77,16 +77,23 @@ int main(int argc, char *argv[])
         fgets(buffer, MAX_MESSAGE_SIZE, stdin);
         buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
 
+        PACKET packet = {
+            .seqn = ++GLOBAL_ID,
+            .timestamp = time(NULL),
+            .length = strlen(buffer),
+        };
+        strncpy(packet.payload, buffer, MAX_MESSAGE_SIZE + 2);
+
         /* write in the socket */
-        n = write(sockfd, buffer, strlen(buffer));
-        if (n < 0)
+        bytes_read = write(sockfd, (void *)&packet, sizeof(PACKET));
+        if (bytes_read < 0)
             logger_error("On writing to socket\n");
 
         bzero(buffer, MAX_MESSAGE_SIZE + 2);
 
         /* read from the socket */
-        n = read(sockfd, buffer, MAX_MESSAGE_SIZE);
-        if (n < 0)
+        bytes_read = read(sockfd, buffer, MAX_MESSAGE_SIZE);
+        if (bytes_read < 0)
             logger_error("On reading from socket\n");
 
         logger_debug("ACK: %s\n", buffer);
