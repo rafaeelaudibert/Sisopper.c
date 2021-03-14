@@ -95,8 +95,8 @@ int main(int argc, char *argv[])
     }
 
 cleanup:
-    chained_list_iterate(chained_list_sockets_fd, &close_socket);
     chained_list_iterate(chained_list_threads, &join_thread);
+    chained_list_iterate(chained_list_sockets_fd, &close_socket);
 
     close(sockfd);
 
@@ -114,7 +114,7 @@ void *handle_connection(void *void_sockfd)
         bzero(buffer, BUFFER_SIZE);
 
         /* read from the socket */
-        n = read(sockfd, buffer, 256);
+        n = read(sockfd, buffer, BUFFER_SIZE);
         if (n < 0 && !received_sigint)
         {
             logger_error("[Socket %d] On reading from socket\n", sockfd);
