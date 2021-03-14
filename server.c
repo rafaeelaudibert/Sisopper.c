@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
     }
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
+    serv_addr.sin_port = htons(DEFAULT_PORT);
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     bzero(&(serv_addr.sin_zero), 8);
 
@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
         exit_code = ERROR_LISTEN;
         goto cleanup;
     }
-    logger_info("Listening on port %d...\n", PORT);
+    logger_info("Listening on port %d...\n", DEFAULT_PORT);
 
     while (!received_sigint)
     {
