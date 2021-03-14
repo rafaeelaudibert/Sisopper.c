@@ -4,6 +4,7 @@
         "exit_errors.h": "c",
         "strings.h": "c",
         "stdlib.h": "c",
-        "config.h": "c"
+        "config.h": "c",
+        "logger.h": "c"
     }
 }

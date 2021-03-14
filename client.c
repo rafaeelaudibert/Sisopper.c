@@ -9,6 +9,7 @@
 
 #include "config.h"
 #include "exit_errors.h"
+#include "logger.h"
 
 int main(int argc, char *argv[])
 {
@@ -17,7 +18,7 @@ int main(int argc, char *argv[])
 
     if (argc < 2)
     {
-        fprintf(stderr, "Usage: %s <profile> <server address=%s> <port=%d>\n", argv[0], DEFAULT_HOST, DEFAULT_PORT);
+        logger_info("Usage: %s <profile> <server address=%s> <port=%d>\n", argv[0], DEFAULT_HOST, DEFAULT_PORT);
         exit(NOT_ENOUGH_ARGUMENTS_ERROR);
     }
 
@@ -25,8 +26,7 @@ int main(int argc, char *argv[])
     int len_handle = strlen(user_handle);
     if (len_handle < HANDLE_MIN_SIZE || len_handle > HANDLE_MAX_SIZE || argv[1][0] != HANDLE_FIRST_CHARACTER)
     {
-        fprintf(
-            stderr,
+        logger_error(
             "<profile> must start with a '%c' character, and contain at least %d and at most %d characters. You passed %s.\n",
             HANDLE_FIRST_CHARACTER,
             HANDLE_MIN_SIZE,
@@ -34,17 +34,18 @@ int main(int argc, char *argv[])
             user_handle);
         exit(INCORRECT_HANDLE_ERROR);
     }
+    logger_debug("Will connect with handle %s\n", user_handle);
 
     struct hostent *server = argc >= 3 ? gethostbyname(argv[2]) : gethostbyname(DEFAULT_HOST);
     if (server == NULL)
     {
-        fprintf(stderr, "ERROR, no such host\n");
+        logger_error("No such host\n");
         exit(INCORRECT_HOST_ERROR);
     }
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        fprintf(stderr, "ERROR opening socket\n");
+        logger_error("On opening socket\n");
         exit(ERROR_OPEN_SOCKET);
     }
 
@@ -54,10 +55,11 @@ int main(int argc, char *argv[])
     serv_addr.sin_port = htons(port);
     serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
     bzero(&(serv_addr.sin_zero), 8);
+    logger_debug("Will connect to %s:%d\n", server->h_name, port);
 
     if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        fprintf(stderr, "ERROR connecting\n");
+        logger_error("On connecting\n");
         close(sockfd);
         exit(ERROR_STARTING_CONNECTION);
     }
@@ -72,14 +74,14 @@ int main(int argc, char *argv[])
         /* write in the socket */
         n = write(sockfd, buffer, strlen(buffer));
         if (n < 0)
-            printf("ERROR writing to socket\n");
+            logger_error("On writing to socket\n");
 
         bzero(buffer, 256);
 
         /* read from the socket */
         n = read(sockfd, buffer, 256);
         if (n < 0)
-            printf("ERROR reading from socket\n");
+            logger_error("On reading from socket\n");
 
         printf("%s\n", buffer);
     }

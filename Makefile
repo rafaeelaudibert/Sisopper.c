@@ -19,8 +19,8 @@ server.o:
 	${CC} ${FLAGS} -c server.c
 
 # Client related
-client: client.o
-	${CC} ${FLAGS} -o ${CLIENT_BIN} client.o
+client: client.o logger.o
+	${CC} ${FLAGS} -o ${CLIENT_BIN} client.o logger.o
 
 client.o:
 	${CC} ${FLAGS} -c client.c
