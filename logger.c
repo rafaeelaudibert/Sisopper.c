@@ -27,17 +27,23 @@ int logger_error(char *fmt, ...)
     int ret;
     va_list myargs;
 
+    printf("666");
     char *current_timestmap = get_current_timestamp();
 
     /* Initialise the va_list variable with the ... after fmt */
     va_start(myargs, fmt);
 
+    printf("999");
+
     /* Forward the '...' to printf with the correct start */
     printf(ERROR_TEXT, current_timestmap);
     ret = vfprintf(stderr, fmt, myargs);
+    printf("888");
 
     /* Clean up the va_list */
     va_end(myargs);
+
+    printf("777");
 
     // Free timestamp
     free(current_timestmap);

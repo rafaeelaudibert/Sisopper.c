@@ -9,7 +9,7 @@
 typedef struct __packet
 {
     uint16_t seqn;                      // Número de sequência
-    uint16_t length;                    // Comprimento do payload
+    uint16_t length;                    // Comprimento do payload 
     time_t timestamp;                   // Timestamp do dado
     char payload[MAX_MESSAGE_SIZE + 2]; // Dados da mensagem
 } PACKET;

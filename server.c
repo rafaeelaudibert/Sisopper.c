@@ -13,6 +13,7 @@
 #include "exit_errors.h"
 #include "logger.h"
 #include "packet.h"
+#include "user.h"
 
 #include "config.h"
 
@@ -33,6 +34,7 @@ CHAINED_LIST *chained_list_threads = NULL;
 
 int main(int argc, char *argv[])
 {
+    hashInit();
     logger_debug("Initializing on debug mode!\n");
 
     handle_signals();
@@ -40,6 +42,8 @@ int main(int argc, char *argv[])
     int sockfd, exit_code = 0;
     socklen_t clilen = sizeof(struct sockaddr_in);
     struct sockaddr_in serv_addr, cli_addr;
+
+    printf("111");
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
@@ -52,12 +56,18 @@ int main(int argc, char *argv[])
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     bzero(&(serv_addr.sin_zero), 8);
 
+
+    printf("333");
+
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
+        printf("555");
         logger_error("On binding socket\n");
         exit_code = ERROR_BINDING_SOCKET;
         goto cleanup;
     }
+
+    printf("444");
 
     if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
     {
@@ -102,12 +112,33 @@ cleanup:
     return exit_code;
 }
 
+void create_user(int sockfd)
+{
+  char username[MAX_USERNAME_LENGHT];
+  USER user;
+  HASH_USER *hash_user;
+
+  user.sockets_fd[0] = sockfd;
+  user.chained_list_followers = NULL;
+  user.chained_list_notifications = NULL;
+  user.sessions_number = 1;
+
+  read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGHT));
+  logger_info( "New user logged: %s\n", username);
+  hashInsert(username, user);
+  hashPrint();
+  hash_user = hashFind(username);
+  logger_info( "New user logged: %s\n", hash_user->username);
+  logger_info( "New user logged: %d\n", hash_user->user.sessions_number);
+}
+
 void *handle_connection(void *void_sockfd)
 {
     PACKET packet;
     int bytes_read, sockfd = *((int *)void_sockfd);
 
-    logger_debug("[Socket %d] Hello from new thread to handle connection\n", sockfd);
+    create_user(sockfd);
+
     while (!received_sigint)
     {
         bzero((void *)&packet, sizeof(PACKET));
@@ -125,6 +156,7 @@ void *handle_connection(void *void_sockfd)
         }
         else
         {
+            translate_the_message();
             logger_info("[Socket %d] Here is the message: %s\n", sockfd, packet.payload);
 
             /* write the ack in the socket */
@@ -135,6 +167,9 @@ void *handle_connection(void *void_sockfd)
     };
 
     return NULL;
+}
+
+void translate_the_message(){
 }
 
 void close_socket(void *void_socket)
@@ -174,6 +209,8 @@ void handle_signals(void)
     logger_debug("Created new thread to handle EOF detection\n");
 
     chained_list_append_end(chained_list_threads, (void *)thread);
+
+    printf("222");
 }
 
 void *handle_eof(void *arg)

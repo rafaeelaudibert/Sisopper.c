@@ -11,6 +11,7 @@
 #include "exit_errors.h"
 #include "logger.h"
 #include "packet.h"
+#include "user.h"
 
 int GLOBAL_ID = 0;
 
@@ -66,6 +67,8 @@ int main(int argc, char *argv[])
         close(sockfd);
         exit(ERROR_STARTING_CONNECTION);
     }
+
+    bytes_read = write(sockfd, (void *)user_handle, sizeof(MAX_USERNAME_LENGHT));
 
     char buffer[MAX_MESSAGE_SIZE + 2];
     while (1)
