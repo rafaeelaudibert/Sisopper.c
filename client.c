@@ -15,9 +15,40 @@
 
 int GLOBAL_ID = 0;
 
+int identify_command(char* message)
+{
+  logger_info("message %s", message);
+
+  if((message[0] == 'S') &&  (message[1] == 'E') && (message[2] == 'N') && (message[3] == 'D'))
+  {
+    logger_info("Its a send message\n");
+    return SEND;
+  }
+
+  else if((message[0] == 'F') &&  (message[1] == 'O') && (message[2] == 'L') && (message[3] == 'L') && (message[4] == 'O') && (message[5] == 'W'))
+  {
+    logger_info("Its a follow message\n");
+    return FOLLOW;
+  }
+
+  return -1;
+}
+
+void remove_command_from_message(int command, char* message)
+{
+  if (command == FOLLOW)
+  {
+    //TODO remover a string FOLLOW do inicio da mensagem
+  }
+  else if (command == SEND)
+  {
+    //TODO remover a string SEND do inicio da mensagem
+  }
+}
+
 int main(int argc, char *argv[])
 {
-    int sockfd, bytes_read;
+    int sockfd, bytes_read, command;
     struct sockaddr_in serv_addr;
 
     if (argc < 2)
@@ -80,7 +111,12 @@ int main(int argc, char *argv[])
         fgets(buffer, MAX_MESSAGE_SIZE, stdin);
         buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
 
+        command = identify_command(buffer);
+        //TODO se command retornar -1 tem que printar mensagem para o user de mensagem invalida e não mandar o packet
+        remove_command_from_message(command, buffer);
+
         PACKET packet = {
+            .command = command,
             .seqn = ++GLOBAL_ID,
             .timestamp = time(NULL),
             .length = strlen(buffer),

@@ -43,8 +43,6 @@ int main(int argc, char *argv[])
     socklen_t clilen = sizeof(struct sockaddr_in);
     struct sockaddr_in serv_addr, cli_addr;
 
-    printf("111");
-
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         logger_error("On opening socket\n");
@@ -56,18 +54,13 @@ int main(int argc, char *argv[])
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     bzero(&(serv_addr.sin_zero), 8);
 
-
-    printf("333");
-
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        printf("555");
         logger_error("On binding socket\n");
         exit_code = ERROR_BINDING_SOCKET;
         goto cleanup;
     }
 
-    printf("444");
 
     if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
     {
@@ -112,24 +105,50 @@ cleanup:
     return exit_code;
 }
 
-void create_user(int sockfd)
+
+void login_user(int sockfd)
 {
+  //TODO seção critica
   char username[MAX_USERNAME_LENGHT];
   USER user;
   HASH_USER *hash_user;
 
-  user.sockets_fd[0] = sockfd;
-  user.chained_list_followers = NULL;
-  user.chained_list_notifications = NULL;
-  user.sessions_number = 1;
-
   read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGHT));
-  logger_info( "New user logged: %s\n", username);
-  hashInsert(username, user);
-  hashPrint();
   hash_user = hashFind(username);
-  logger_info( "New user logged: %s\n", hash_user->username);
-  logger_info( "New user logged: %d\n", hash_user->user.sessions_number);
+  if(hash_user == 0)
+  {
+    logger_info( "New user logged: %s\n", username);
+    user.sockets_fd[0] = sockfd;
+    user.chained_list_followers = NULL;
+    user.chained_list_notifications = NULL;
+    user.sessions_number = 1;
+    hashInsert(username, user);
+  }
+  else if(hash_user->user.sessions_number<=2)
+  {
+    logger_info( "User in another session: %s\n", hash_user->username);
+    user.sockets_fd[1] = sockfd;
+    user.sessions_number ++;
+  }
+  else{
+    //TODO: Precisa barrar o usuário de conectar porque esta em mais de duas sessões
+  }
+
+  hashPrint();
+}
+
+void process_message(PACKET packet)
+{
+  if(packet.command == FOLLOW)
+  {
+    logger_info( "Following user: %s\n", packet.payload);
+    //TODO follow the user
+  }
+  else if(packet.command == SEND)
+  {
+    logger_info( "Sending message: %s\n", packet.payload);
+    //TODO send the message to the followers
+  }
 }
 
 void *handle_connection(void *void_sockfd)
@@ -137,7 +156,7 @@ void *handle_connection(void *void_sockfd)
     PACKET packet;
     int bytes_read, sockfd = *((int *)void_sockfd);
 
-    create_user(sockfd);
+    login_user(sockfd);
 
     while (!received_sigint)
     {
@@ -156,7 +175,7 @@ void *handle_connection(void *void_sockfd)
         }
         else
         {
-            translate_the_message();
+            process_message(packet);
             logger_info("[Socket %d] Here is the message: %s\n", sockfd, packet.payload);
 
             /* write the ack in the socket */
@@ -169,8 +188,6 @@ void *handle_connection(void *void_sockfd)
     return NULL;
 }
 
-void translate_the_message(){
-}
 
 void close_socket(void *void_socket)
 {
@@ -209,8 +226,6 @@ void handle_signals(void)
     logger_debug("Created new thread to handle EOF detection\n");
 
     chained_list_append_end(chained_list_threads, (void *)thread);
-
-    printf("222");
 }
 
 void *handle_eof(void *arg)
