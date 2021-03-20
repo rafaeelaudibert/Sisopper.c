@@ -13,6 +13,7 @@
 #include "exit_errors.h"
 #include "logger.h"
 #include "packet.h"
+#include "user.h"
 
 #include "config.h"
 
@@ -33,6 +34,7 @@ CHAINED_LIST *chained_list_threads = NULL;
 
 int main(int argc, char *argv[])
 {
+    hashInit();
     logger_debug("Initializing on debug mode!\n");
 
     handle_signals();
@@ -58,6 +60,7 @@ int main(int argc, char *argv[])
         exit_code = ERROR_BINDING_SOCKET;
         goto cleanup;
     }
+
 
     if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
     {
@@ -102,12 +105,59 @@ cleanup:
     return exit_code;
 }
 
+
+void login_user(int sockfd)
+{
+  //TODO seção critica
+  char username[MAX_USERNAME_LENGTH];
+  USER *user = (USER *)malloc(sizeof(USER));;
+  HASH_USER *hash_user;
+
+  read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGTH));
+  hash_user = hashFind(username);
+  if(hash_user == 0)
+  {
+    logger_info( "New user logged: %s\n", username);
+    user->sockets_fd[0] = sockfd;
+    user->chained_list_followers = NULL;
+    user->chained_list_notifications = NULL;
+    user->sessions_number = 1;
+    hashInsert(username, *user);
+  }
+  else if(hash_user->user.sessions_number<=2)
+  {
+    logger_info( "User in another session: %s\n", hash_user->username);
+    user->sockets_fd[1] = sockfd;
+    user->sessions_number ++;
+  }
+  else{
+    //TODO: Precisa barrar o usuário de conectar porque esta em mais de duas sessões
+  }
+
+  hashPrint();
+}
+
+void process_message(PACKET packet)
+{
+  if(packet.command == FOLLOW)
+  {
+    logger_info( "Following user: %s\n", packet.payload);
+    //TODO follow the user
+  }
+  else if(packet.command == SEND)
+  {
+    logger_info( "Sending message: %s\n", packet.payload);
+    //TODO send the message to the followers
+  }
+}
+
 void *handle_connection(void *void_sockfd)
 {
     PACKET packet;
     int bytes_read, sockfd = *((int *)void_sockfd);
 
-    logger_debug("[Socket %d] Hello from new thread to handle connection\n", sockfd);
+    login_user(sockfd);
+
     while (!received_sigint)
     {
         bzero((void *)&packet, sizeof(PACKET));
@@ -125,6 +175,7 @@ void *handle_connection(void *void_sockfd)
         }
         else
         {
+            process_message(packet);
             logger_info("[Socket %d] Here is the message: %s\n", sockfd, packet.payload);
 
             /* write the ack in the socket */
@@ -136,6 +187,7 @@ void *handle_connection(void *void_sockfd)
 
     return NULL;
 }
+
 
 void close_socket(void *void_socket)
 {
