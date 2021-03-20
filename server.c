@@ -109,26 +109,26 @@ cleanup:
 void login_user(int sockfd)
 {
   //TODO seção critica
-  char username[MAX_USERNAME_LENGHT];
-  USER user;
+  char username[MAX_USERNAME_LENGTH];
+  USER *user = (USER *)malloc(sizeof(USER));;
   HASH_USER *hash_user;
 
-  read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGHT));
+  read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGTH));
   hash_user = hashFind(username);
   if(hash_user == 0)
   {
     logger_info( "New user logged: %s\n", username);
-    user.sockets_fd[0] = sockfd;
-    user.chained_list_followers = NULL;
-    user.chained_list_notifications = NULL;
-    user.sessions_number = 1;
-    hashInsert(username, user);
+    user->sockets_fd[0] = sockfd;
+    user->chained_list_followers = NULL;
+    user->chained_list_notifications = NULL;
+    user->sessions_number = 1;
+    hashInsert(username, *user);
   }
   else if(hash_user->user.sessions_number<=2)
   {
     logger_info( "User in another session: %s\n", hash_user->username);
-    user.sockets_fd[1] = sockfd;
-    user.sessions_number ++;
+    user->sockets_fd[1] = sockfd;
+    user->sessions_number ++;
   }
   else{
     //TODO: Precisa barrar o usuário de conectar porque esta em mais de duas sessões

@@ -6,12 +6,15 @@
 
 #include "config.h"
 
-#define SEND 22
-#define FOLLOW 33
+typedef enum Command {
+		SEND = 1,
+		FOLLOW,
+    UNKNOWN,
+	} COMMAND;
 
 typedef struct __packet
 {
-    int command;
+    COMMAND command;
     uint16_t seqn;                      // Número de sequência
     uint16_t length;                    // Comprimento do payload
     time_t timestamp;                   // Timestamp do dado

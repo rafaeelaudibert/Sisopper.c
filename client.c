@@ -15,23 +15,21 @@
 
 int GLOBAL_ID = 0;
 
-int identify_command(char* message)
+COMMAND identify_command(char* message)
 {
-  logger_info("message %s", message);
-
   if((message[0] == 'S') &&  (message[1] == 'E') && (message[2] == 'N') && (message[3] == 'D'))
   {
-    logger_info("Its a send message\n");
+    logger_info("Its a SEND message\n");
     return SEND;
   }
 
   else if((message[0] == 'F') &&  (message[1] == 'O') && (message[2] == 'L') && (message[3] == 'L') && (message[4] == 'O') && (message[5] == 'W'))
   {
-    logger_info("Its a follow message\n");
+    logger_info("Its a FOLLOW message\n");
     return FOLLOW;
   }
 
-  return -1;
+  return UNKNOWN;
 }
 
 void remove_command_from_message(int command, char* message)
@@ -99,7 +97,7 @@ int main(int argc, char *argv[])
         exit(ERROR_STARTING_CONNECTION);
     }
 
-    bytes_read = write(sockfd, (void *)user_handle, sizeof(MAX_USERNAME_LENGHT));
+    bytes_read = write(sockfd, (void *)user_handle, sizeof(MAX_USERNAME_LENGTH));
 
     char buffer[MAX_MESSAGE_SIZE + 2];
     while (1)

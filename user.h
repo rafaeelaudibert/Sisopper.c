@@ -1,5 +1,5 @@
-#define MAX_SESSIONS 1
-#define MAX_USERNAME_LENGHT 20
+#define MAX_SESSIONS 2
+#define MAX_USERNAME_LENGTH 20
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,7 +18,7 @@ typedef struct user
 
 typedef struct hash_user
 {
-  char username[MAX_USERNAME_LENGHT];
+  char username[MAX_USERNAME_LENGTH];
   USER user;
   struct hash_user *next;
 } HASH_USER;
