@@ -242,7 +242,7 @@ void handle_signals(void)
 
 void *handle_eof(void *arg)
 {
-    const char BUFFER_SIZE = 100;
+    const char BUFFER_SIZE = 5;
     char *buffer = (char *)malloc(sizeof(char) * BUFFER_SIZE);
     while (fgets(buffer, BUFFER_SIZE - 2, stdin))
     {
