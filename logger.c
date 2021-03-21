@@ -34,7 +34,8 @@ int logger_error(char *fmt, ...)
 
     /* Forward the '...' to printf with the correct start */
     printf(ERROR_TEXT, current_timestmap);
-    ret = vfprintf(stderr, fmt, myargs);
+    fflush(stdout);
+    ret = vfprintf(stdout, fmt, myargs);
 
     /* Clean up the va_list */
     va_end(myargs);
@@ -57,6 +58,7 @@ int logger_warn(char *fmt, ...)
 
     /* Forward the '...' to printf with the correct start */
     printf(WARN_TEXT, current_timestmap);
+    fflush(stdout);
     ret = vfprintf(stdout, fmt, myargs);
 
     /* Clean up the va_list */
@@ -80,6 +82,7 @@ int logger_info(char *fmt, ...)
 
     /* Forward the '...' to printf with the correct start */
     printf(INFO_TEXT, current_timestmap);
+    fflush(stdout);
     ret = vfprintf(stdout, fmt, myargs);
 
     /* Clean up the va_list */
@@ -107,6 +110,7 @@ int logger_debug(char *fmt, ...)
 
     /* Forward the '...' to printf with the correct start */
     printf(DEBUG_TEXT, current_timestmap);
+    fflush(stdout);
     ret = vfprintf(stdout, fmt, myargs);
 
     /* Clean up the va_list */
