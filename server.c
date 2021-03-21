@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <pthread.h>
+#include <assert.h>
 
 #include "chained_list.h"
 #include "exit_errors.h"
@@ -24,13 +25,15 @@ static int received_sigint = FALSE;
 
 void *handle_connection(void *);
 void close_socket(void *);
-void join_thread(void *);
+void cancel_thread(void *);
 void sigint_handler(int);
 void handle_signals(void);
 void *handle_eof(void *);
+void cleanup(int);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
+int sockfd = 0;
 
 int main(int argc, char *argv[])
 {
@@ -39,7 +42,6 @@ int main(int argc, char *argv[])
 
     handle_signals();
 
-    int sockfd, exit_code = 0;
     socklen_t clilen = sizeof(struct sockaddr_in);
     struct sockaddr_in serv_addr, cli_addr;
 
@@ -64,51 +66,49 @@ int main(int argc, char *argv[])
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
         logger_error("On binding socket\n");
-        exit_code = ERROR_BINDING_SOCKET;
-        goto cleanup;
+        cleanup(ERROR_BINDING_SOCKET);
     }
 
     if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
     {
         logger_error("On starting to listen");
-        exit_code = ERROR_LISTEN;
-        goto cleanup;
+        cleanup(ERROR_LISTEN);
     }
     logger_info("Listening on port %d...\n", DEFAULT_PORT);
 
-    while (!received_sigint)
+    while (true)
     {
         int *newsockfd = (int *)malloc(sizeof(int));
         *newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
 
-        // If received a sigint while it was blocked waiting for a new connection, we skip what we are doing below
-        if (received_sigint)
-            break;
-
         if (*newsockfd == -1)
         {
             logger_error("On accept\n");
-            exit_code = ERROR_ACCEPT;
-            goto cleanup;
+            cleanup(ERROR_ACCEPT);
         }
 
         logger_info("New connection from %s:%d\n", inet_ntoa(cli_addr.sin_addr), cli_addr.sin_port);
 
         pthread_t *thread = (pthread_t *)malloc(sizeof(pthread_t));
         pthread_create(thread, NULL, (void *(*)(void *)) & handle_connection, (void *)newsockfd);
-        logger_debug("Created new thread to handle this connection\n");
+        logger_debug("Created new thread %ld to handle this connection\n", *thread);
 
-        chained_list_append_end(chained_list_sockets_fd, (void *)newsockfd);
-        chained_list_append_end(chained_list_threads, (void *)thread);
+        chained_list_sockets_fd = chained_list_append_end(chained_list_sockets_fd, (void *)newsockfd);
+        chained_list_threads = chained_list_append_end(chained_list_threads, (void *)thread);
     }
 
-cleanup:
-    chained_list_iterate(chained_list_threads, &join_thread);
+    // Assert that this is never reached
+    assert(0);
+}
+
+void cleanup(int exit_code)
+{
+    chained_list_iterate(chained_list_threads, &cancel_thread);
     chained_list_iterate(chained_list_sockets_fd, &close_socket);
 
     close(sockfd);
 
-    return exit_code;
+    exit(exit_code);
 }
 
 void login_user(int sockfd)
@@ -203,12 +203,12 @@ void close_socket(void *void_socket)
     close(socket);
 }
 
-void join_thread(void *void_pthread)
+void cancel_thread(void *void_pthread)
 {
     pthread_t thread_id = *((pthread_t *)void_pthread);
 
-    logger_debug("Joining thread PID %d...\n", thread_id);
-    pthread_join(thread_id, NULL);
+    logger_debug("Cancelling thread TID %li from thread TID %li...\n", (unsigned long int)thread_id, (unsigned long int)pthread_self());
+    pthread_cancel(thread_id);
 }
 
 void sigint_handler(int _sigint)
@@ -216,7 +216,12 @@ void sigint_handler(int _sigint)
     if (!received_sigint)
     {
         logger_warn("SIGINT received, closing descriptors and finishing...\n");
+        cleanup(0);
         received_sigint = TRUE;
+    }
+    else
+    {
+        logger_error("Already received SIGINT... Waiting to finish cleaning up...\n");
     }
 }
 
