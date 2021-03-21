@@ -5,6 +5,8 @@
 #include <time.h>
 
 #include "config.h"
+#define NUMBER_OF_CHARS_IN_SEND 5
+#define NUMBER_OF_CHARS_IN_FOLLOW 7
 
 typedef enum Command {
 		SEND = 1,

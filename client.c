@@ -17,31 +17,29 @@ int GLOBAL_ID = 0;
 
 COMMAND identify_command(char *message)
 {
-    if (message[0] == 'S' && message[1] == 'E' && message[2] == 'N' && message[3] == 'D')
-    {
-        logger_info("Its a SEND message\n");
-        return SEND;
-    }
+  if(strncmp(message, "SEND ", NUMBER_OF_CHARS_IN_SEND) == 0)
+  {
+    logger_info("Its a SEND message\n");
+    return SEND;
+  }
 
-    else if (message[0] == 'F' && message[1] == 'O' && message[2] == 'L' && message[3] == 'L' && message[4] == 'O' && message[5] == 'W')
-    {
-        logger_info("Its a FOLLOW message\n");
-        return FOLLOW;
-    }
+  else if(strncmp(message, "FOLLOW ", NUMBER_OF_CHARS_IN_FOLLOW) == 0)
+  {
+    logger_info("Its a FOLLOW message\n");
+    return FOLLOW;
+  }
 
     return UNKNOWN;
 }
 
-void remove_command_from_message(int command, char *message)
+char* remove_command_from_message(int command, char *message)
 {
-    if (command == FOLLOW)
-    {
-        //TODO remover a string FOLLOW do inicio da mensagem
-    }
-    else if (command == SEND)
-    {
-        //TODO remover a string SEND do inicio da mensagem
-    }
+  if (command == FOLLOW)
+    message = message + NUMBER_OF_CHARS_IN_FOLLOW;
+  else if (command == SEND)
+    message = message + NUMBER_OF_CHARS_IN_SEND;
+
+  return message;
 }
 
 int main(int argc, char *argv[])
@@ -117,8 +115,13 @@ int main(int argc, char *argv[])
         buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
 
         command = identify_command(buffer);
+        if(command == UNKNOWN)
+        {
+          logger_info("Message unknown!\n");
+          continue;
+        }
         //TODO se command retornar -1 tem que printar mensagem para o user de mensagem invalida e não mandar o packet
-        remove_command_from_message(command, buffer);
+        strcpy(buffer, remove_command_from_message(command, buffer));
 
         PACKET packet = {
             .command = command,
