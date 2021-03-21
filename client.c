@@ -42,6 +42,26 @@ char* remove_command_from_message(int command, char *message)
   return message;
 }
 
+void get_input_message(char* buffer)
+{
+  char *p;
+
+  if(fgets(buffer, MAX_MESSAGE_SIZE, stdin))
+  {
+    char *p;
+    if(p=strchr(buffer, '\n'))
+      *p = 0;
+    else
+    {
+      scanf("%*[^\n]");
+      scanf("%*c");
+    }
+  }
+  buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
+
+  logger_info("Mesasge: %s\n", buffer);
+}
+
 int main(int argc, char *argv[])
 {
     int sockfd, bytes_read, command;
@@ -111,8 +131,7 @@ int main(int argc, char *argv[])
         // it doesn't send as the next text message automatically
         printf("💬 Enter the message: ");
         bzero(buffer, MAX_MESSAGE_SIZE + 2);
-        fgets(buffer, MAX_MESSAGE_SIZE, stdin);
-        buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
+        get_input_message(buffer);
 
         command = identify_command(buffer);
         if(command == UNKNOWN)
@@ -120,7 +139,6 @@ int main(int argc, char *argv[])
           logger_info("Message unknown!\n");
           continue;
         }
-        //TODO se command retornar -1 tem que printar mensagem para o user de mensagem invalida e não mandar o packet
         strcpy(buffer, remove_command_from_message(command, buffer));
 
         PACKET packet = {
