@@ -32,7 +32,9 @@ void handle_signals(void);
 void *handle_eof(void *);
 void cleanup(int);
 USER *login_user(int sockfd);
-void process_message(PACKET packet);
+void process_message(PACKET packet, USER user);
+void print_username(void* void_parameter);
+void follow_user(char* user_to_follow_username, char* current_user_username);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
@@ -146,6 +148,7 @@ USER *login_user(int sockfd)
         logger_info("New user logged: %s\n", username);
         USER *user = (USER *)malloc(sizeof(USER));
 
+        strcpy(user->username, username);
         user->sockets_fd[0] = sockfd;
         user->sockets_fd[1] = -1;
         user->chained_list_followers = NULL;
@@ -171,11 +174,36 @@ USER *login_user(int sockfd)
     return NULL;
 }
 
-void process_message(PACKET packet)
+
+void print_username(void* void_parameter)
+{
+    logger_info("HERE111\n");
+    char* parameter = *((char**) void_parameter);
+    logger_info("HERE333\n");
+    printf("%s", parameter);
+    logger_info("HERE444\n");
+}
+
+void follow_user(char* user_to_follow_username, char* current_user_username)
+{
+    HASH_USER *hash_user = hashFind(user_to_follow_username);
+    if(hash_user)
+    {
+        hash_user->user.chained_list_followers = chained_list_append_end(hash_user->user.chained_list_followers, current_user_username);
+        logger_info("HERE\n");
+        chained_list_print(hash_user->user.chained_list_followers, &print_username);
+        logger_info("HERE2\n");
+    }
+    else
+        logger_error("Could not follow the user %s\n", user_to_follow_username);
+}
+
+void process_message(PACKET packet, USER user)
 {
     if (packet.command == FOLLOW)
     {
         logger_info("Following user: %s\n", packet.payload);
+        follow_user(packet.payload, user.username);
 
         // TODO: SEÇÃO CRÍTICA DE FOLLOW
 
@@ -193,8 +221,8 @@ void *handle_connection(void *void_sockfd)
     PACKET packet;
     int bytes_read, sockfd = *((int *)void_sockfd);
 
-    USER *user = login_user(sockfd);
-    boolean can_login = user != NULL;
+    USER *current_user = login_user(sockfd);
+    boolean can_login = current_user != NULL;
 
     bytes_read = write(sockfd, &can_login, sizeof(can_login));
     if (bytes_read < 0)
@@ -223,14 +251,14 @@ void *handle_connection(void *void_sockfd)
             logger_info("[Socket %d] Client closed connection\n", sockfd);
 
             /* TODO: Seção crítica */
-            user->sessions_number--;
+            current_user->sessions_number--;
             /* TODO: END seção crítica */
 
             return NULL;
         }
         else
         {
-            process_message(packet);
+            process_message(packet, *current_user);
             logger_info("[Socket %d] Here is the message: %s\n", sockfd, packet.payload);
 
             /* write the ack in the socket */

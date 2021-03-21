@@ -1,13 +1,16 @@
+#define MAX_SESSIONS 2
+#define MAX_USERNAME_LENGTH 20
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "chained_list.h"
-#include "config.h"
 
 #define HASH_SIZE 1999
 
 typedef struct user
 {
+  char username[MAX_USERNAME_LENGTH];;
   int sockets_fd[MAX_SESSIONS];
   CHAINED_LIST *chained_list_followers;
   CHAINED_LIST *chained_list_notifications;
