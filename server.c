@@ -31,7 +31,7 @@ void sigint_handler(int);
 void handle_signals(void);
 void *handle_eof(void *);
 void cleanup(int);
-int login_user(int sockfd);
+USER *login_user(int sockfd);
 void process_message(PACKET packet);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
@@ -119,36 +119,39 @@ int get_free_socket_spot(int *sockets_fd)
     int i;
     for (i = 0; i <= MAX_SESSIONS; i++)
     {
-        logger_info("socket: %d\n", sockets_fd[i]);
         if (sockets_fd[i] == -1)
             return i;
     }
-    //TODO there is no free spot
+
     return -1;
 }
 
-int login_user(int sockfd)
+USER *login_user(int sockfd)
 {
-    //TODO BEGIN seção critica
     char username[MAX_USERNAME_LENGTH];
-    USER *user = (USER *)malloc(sizeof(USER));
-    HASH_USER *hash_user;
 
-    boolean can_login = FALSE;
+    int bytes_read = read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGTH));
+    if (bytes_read < 0)
+    {
+        logger_error("Couldn't read username for socket %d\n", sockfd);
+        return NULL;
+    }
 
-    read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGTH));
-    hash_user = hashFind(username);
-    if (hash_user == 0)
+    //TODO BEGIN seção critica
+    HASH_USER *hash_user = hashFind(username);
+    if (!hash_user)
     {
         logger_info("New user logged: %s\n", username);
+        USER *user = (USER *)malloc(sizeof(USER));
+
         user->sockets_fd[0] = sockfd;
         user->sockets_fd[1] = -1;
         user->chained_list_followers = NULL;
         user->chained_list_notifications = NULL;
         user->sessions_number = 1;
-        hashInsert(username, *user);
+        hash_user = hashInsert(username, *user);
 
-        can_login = TRUE;
+        return &hash_user->user;
     }
     else if (hash_user->user.sessions_number < MAX_SESSIONS)
     {
@@ -159,11 +162,11 @@ int login_user(int sockfd)
         hash_user->user.sockets_fd[free_socket_spot] = sockfd;
         hash_user->user.sessions_number++;
 
-        can_login = TRUE;
+        return &hash_user->user;
     }
     // TODO: END SEÇÃO CRÍTICA
 
-    return can_login;
+    return NULL;
 }
 
 void process_message(PACKET packet)
@@ -185,7 +188,8 @@ void *handle_connection(void *void_sockfd)
     PACKET packet;
     int bytes_read, sockfd = *((int *)void_sockfd);
 
-    boolean can_login = login_user(sockfd);
+    USER *user = login_user(sockfd);
+    boolean can_login = user != NULL;
 
     bytes_read = write(sockfd, &can_login, sizeof(can_login));
     if (bytes_read < 0)
@@ -194,7 +198,10 @@ void *handle_connection(void *void_sockfd)
         return NULL;
     }
     if (!can_login)
+    {
+        logger_error("User couldn't login! Max connections (%d) reached\n", MAX_SESSIONS);
         return NULL;
+    }
 
     while (1)
     {
@@ -208,7 +215,12 @@ void *handle_connection(void *void_sockfd)
         }
         else if (bytes_read == 0)
         {
-            logger_info("[Socket %d] Connection closed\n", sockfd);
+            logger_info("[Socket %d] Client closed connection\n", sockfd);
+
+            /* TODO: Seção crítica */
+            user->sessions_number--;
+            /* TODO: END seção crítica */
+
             return NULL;
         }
         else
