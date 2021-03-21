@@ -130,7 +130,7 @@ USER *login_user(int sockfd)
 {
     char username[MAX_USERNAME_LENGTH];
 
-    int bytes_read = read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGTH));
+    int bytes_read = read(sockfd, (void *)username, sizeof(char)*MAX_USERNAME_LENGTH);
     if (bytes_read < 0)
     {
         logger_error("Couldn't read username for socket %d\n", sockfd);
