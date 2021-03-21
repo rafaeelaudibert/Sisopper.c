@@ -18,6 +18,7 @@
 
 #include "config.h"
 
+typedef int boolean;
 #define FALSE 0
 #define TRUE 1
 
@@ -30,7 +31,7 @@ void sigint_handler(int);
 void handle_signals(void);
 void *handle_eof(void *);
 void cleanup(int);
-void login_user(int sockfd);
+int login_user(int sockfd);
 void process_message(PACKET packet);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
@@ -113,53 +114,56 @@ void cleanup(int exit_code)
     exit(exit_code);
 }
 
-int get_free_socket_spot(int* sockets_fd)
+int get_free_socket_spot(int *sockets_fd)
 {
-  int i;
-  for(i=0; i<=MAX_SESSIONS; i++)
-  {
-    logger_info( "socket: %d\n", sockets_fd[i]);
-    if(sockets_fd[i] == -1)
-      return i;
-  }
-  //TODO there is no free spot
-  return -1;
+    int i;
+    for (i = 0; i <= MAX_SESSIONS; i++)
+    {
+        logger_info("socket: %d\n", sockets_fd[i]);
+        if (sockets_fd[i] == -1)
+            return i;
+    }
+    //TODO there is no free spot
+    return -1;
 }
 
-void login_user(int sockfd)
+int login_user(int sockfd)
 {
-  //TODO seção critica
-  char username[MAX_USERNAME_LENGTH];
-  USER *user = (USER *)malloc(sizeof(USER));
-  HASH_USER *hash_user;
-  int free_socket_spot;
+    //TODO BEGIN seção critica
+    char username[MAX_USERNAME_LENGTH];
+    USER *user = (USER *)malloc(sizeof(USER));
+    HASH_USER *hash_user;
 
-  read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGTH));
-  hash_user = hashFind(username);
-  if(hash_user == 0)
-  {
-    logger_info( "New user logged: %s\n", username);
-    user->sockets_fd[0] = sockfd;
-    user->sockets_fd[1] = -1;
-    user->chained_list_followers = NULL;
-    user->chained_list_notifications = NULL;
-    user->sessions_number = 1;
-    hashInsert(username, *user);
-  }
-  else if(hash_user->user.sessions_number<=MAX_SESSIONS)
-  {
-    free_socket_spot = get_free_socket_spot(hash_user->user.sockets_fd);
-    logger_info( "User in another session: %s\n", hash_user->username);
-    logger_info( "sessions: %d\n", hash_user->user.sessions_number);
-    logger_info( "Saving socket in position: %d\n", free_socket_spot);
-    hash_user->user.sockets_fd[free_socket_spot] = sockfd;
-    hash_user->user.sessions_number ++;
-  }
-  else{
-    //TODO: Precisa barrar o usuário de conectar porque esta em mais de duas sessões
-  }
+    boolean can_login = FALSE;
 
-    hashPrint();
+    read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGTH));
+    hash_user = hashFind(username);
+    if (hash_user == 0)
+    {
+        logger_info("New user logged: %s\n", username);
+        user->sockets_fd[0] = sockfd;
+        user->sockets_fd[1] = -1;
+        user->chained_list_followers = NULL;
+        user->chained_list_notifications = NULL;
+        user->sessions_number = 1;
+        hashInsert(username, *user);
+
+        can_login = TRUE;
+    }
+    else if (hash_user->user.sessions_number < MAX_SESSIONS)
+    {
+        int free_socket_spot = get_free_socket_spot(hash_user->user.sockets_fd);
+        logger_info("User in another session: %s\n", hash_user->username);
+        logger_info("sessions: %d\n", hash_user->user.sessions_number);
+        logger_info("Saving socket in position: %d\n", free_socket_spot);
+        hash_user->user.sockets_fd[free_socket_spot] = sockfd;
+        hash_user->user.sessions_number++;
+
+        can_login = TRUE;
+    }
+    // TODO: END SEÇÃO CRÍTICA
+
+    return can_login;
 }
 
 void process_message(PACKET packet)
@@ -181,15 +185,24 @@ void *handle_connection(void *void_sockfd)
     PACKET packet;
     int bytes_read, sockfd = *((int *)void_sockfd);
 
-    login_user(sockfd);
+    boolean can_login = login_user(sockfd);
 
-    while (!received_sigint)
+    bytes_read = write(sockfd, &can_login, sizeof(can_login));
+    if (bytes_read < 0)
+    {
+        logger_error("[Socket %d] On sending login ACK/NACK (%d)\n", sockfd, can_login);
+        return NULL;
+    }
+    if (!can_login)
+        return NULL;
+
+    while (1)
     {
         bzero((void *)&packet, sizeof(PACKET));
 
         /* read from the socket */
         bytes_read = read(sockfd, (void *)&packet, sizeof(PACKET));
-        if (bytes_read < 0 && !received_sigint)
+        if (bytes_read < 0)
         {
             logger_error("[Socket %d] On reading from socket\n", sockfd);
         }

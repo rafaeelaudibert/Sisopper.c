@@ -17,29 +17,29 @@ int GLOBAL_ID = 0;
 
 COMMAND identify_command(char *message)
 {
-  if(strncmp(message, "SEND ", NUMBER_OF_CHARS_IN_SEND) == 0)
-  {
-    logger_info("Its a SEND message\n");
-    return SEND;
-  }
+    if (strncmp(message, "SEND ", NUMBER_OF_CHARS_IN_SEND) == 0)
+    {
+        logger_info("Its a SEND message\n");
+        return SEND;
+    }
 
-  else if(strncmp(message, "FOLLOW ", NUMBER_OF_CHARS_IN_FOLLOW) == 0)
-  {
-    logger_info("Its a FOLLOW message\n");
-    return FOLLOW;
-  }
+    else if (strncmp(message, "FOLLOW ", NUMBER_OF_CHARS_IN_FOLLOW) == 0)
+    {
+        logger_info("Its a FOLLOW message\n");
+        return FOLLOW;
+    }
 
     return UNKNOWN;
 }
 
-char* remove_command_from_message(int command, char *message)
+char *remove_command_from_message(int command, char *message)
 {
-  if (command == FOLLOW)
-    message = message + NUMBER_OF_CHARS_IN_FOLLOW;
-  else if (command == SEND)
-    message = message + NUMBER_OF_CHARS_IN_SEND;
+    if (command == FOLLOW)
+        message = message + NUMBER_OF_CHARS_IN_FOLLOW;
+    else if (command == SEND)
+        message = message + NUMBER_OF_CHARS_IN_SEND;
 
-  return message;
+    return message;
 }
 
 int main(int argc, char *argv[])
@@ -103,6 +103,24 @@ int main(int argc, char *argv[])
     }
 
     bytes_read = write(sockfd, (void *)user_handle, sizeof(MAX_USERNAME_LENGTH));
+    if (bytes_read < 0)
+    {
+        logger_error("On sending user handle\n");
+        exit(ERROR_STARTING_CONNECTION);
+    }
+
+    int can_login;
+    bytes_read = read(sockfd, (void *)&can_login, sizeof(can_login));
+    if (bytes_read < 0)
+    {
+        logger_error("On reading user login status\n");
+        exit(ERROR_STARTING_CONNECTION);
+    }
+    if (!can_login)
+    {
+        logger_error("You cannot login. Max conections exceeded (%d)\n", MAX_SESSIONS);
+        exit(ERROR_LOGIN);
+    }
 
     char buffer[MAX_MESSAGE_SIZE + 2];
     while (1)
@@ -115,10 +133,10 @@ int main(int argc, char *argv[])
         buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
 
         command = identify_command(buffer);
-        if(command == UNKNOWN)
+        if (command == UNKNOWN)
         {
-          logger_info("Message unknown!\n");
-          continue;
+            logger_info("Message unknown!\n");
+            continue;
         }
         //TODO se command retornar -1 tem que printar mensagem para o user de mensagem invalida e não mandar o packet
         strcpy(buffer, remove_command_from_message(command, buffer));

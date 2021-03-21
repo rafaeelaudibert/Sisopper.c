@@ -1,10 +1,8 @@
-#define MAX_SESSIONS 2
-#define MAX_USERNAME_LENGTH 20
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "chained_list.h"
+#include "config.h"
 
 #define HASH_SIZE 1999
 

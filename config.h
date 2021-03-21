@@ -4,6 +4,8 @@
 // Common
 #define DEFAULT_PORT 4000
 #define DEFAULT_HOST "localhost"
+#define MAX_SESSIONS 2
+#define MAX_USERNAME_LENGTH 20
 
 // Server
 #define CONNECTIONS_TO_ACCEPT 15
