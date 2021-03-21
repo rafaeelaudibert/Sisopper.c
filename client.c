@@ -15,33 +15,33 @@
 
 int GLOBAL_ID = 0;
 
-COMMAND identify_command(char* message)
+COMMAND identify_command(char *message)
 {
-  if((message[0] == 'S') &&  (message[1] == 'E') && (message[2] == 'N') && (message[3] == 'D'))
-  {
-    logger_info("Its a SEND message\n");
-    return SEND;
-  }
+    if (message[0] == 'S' && message[1] == 'E' && message[2] == 'N' && message[3] == 'D')
+    {
+        logger_info("Its a SEND message\n");
+        return SEND;
+    }
 
-  else if((message[0] == 'F') &&  (message[1] == 'O') && (message[2] == 'L') && (message[3] == 'L') && (message[4] == 'O') && (message[5] == 'W'))
-  {
-    logger_info("Its a FOLLOW message\n");
-    return FOLLOW;
-  }
+    else if (message[0] == 'F' && message[1] == 'O' && message[2] == 'L' && message[3] == 'L' && message[4] == 'O' && message[5] == 'W')
+    {
+        logger_info("Its a FOLLOW message\n");
+        return FOLLOW;
+    }
 
-  return UNKNOWN;
+    return UNKNOWN;
 }
 
-void remove_command_from_message(int command, char* message)
+void remove_command_from_message(int command, char *message)
 {
-  if (command == FOLLOW)
-  {
-    //TODO remover a string FOLLOW do inicio da mensagem
-  }
-  else if (command == SEND)
-  {
-    //TODO remover a string SEND do inicio da mensagem
-  }
+    if (command == FOLLOW)
+    {
+        //TODO remover a string FOLLOW do inicio da mensagem
+    }
+    else if (command == SEND)
+    {
+        //TODO remover a string SEND do inicio da mensagem
+    }
 }
 
 int main(int argc, char *argv[])
@@ -80,6 +80,13 @@ int main(int argc, char *argv[])
     {
         logger_error("On opening socket\n");
         exit(ERROR_OPEN_SOCKET);
+    }
+
+    int true = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
+    {
+        logger_error("On setting the socket configurations\n");
+        exit(ERROR_CONFIGURATION_SOCKET);
     }
 
     int port = argc >= 4 ? atoi(argv[3]) : DEFAULT_PORT;

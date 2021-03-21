@@ -5,6 +5,7 @@ enum EXIT_ERRORS
 {
     // Common
     ERROR_OPEN_SOCKET = 1,
+    ERROR_CONFIGURATION_SOCKET,
 
     // Server
     ERROR_ACCEPTING_CONNECTION,

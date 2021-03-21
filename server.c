@@ -49,6 +49,13 @@ int main(int argc, char *argv[])
         exit(ERROR_OPEN_SOCKET);
     }
 
+    int true = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
+    {
+        logger_error("On setting the socket configurations\n");
+        exit(ERROR_CONFIGURATION_SOCKET);
+    }
+
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(DEFAULT_PORT);
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -60,7 +67,6 @@ int main(int argc, char *argv[])
         exit_code = ERROR_BINDING_SOCKET;
         goto cleanup;
     }
-
 
     if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
     {
@@ -105,50 +111,51 @@ cleanup:
     return exit_code;
 }
 
-
 void login_user(int sockfd)
 {
-  //TODO seção critica
-  char username[MAX_USERNAME_LENGTH];
-  USER *user = (USER *)malloc(sizeof(USER));;
-  HASH_USER *hash_user;
+    //TODO seção critica
+    char username[MAX_USERNAME_LENGTH];
+    USER *user = (USER *)malloc(sizeof(USER));
+    ;
+    HASH_USER *hash_user;
 
-  read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGTH));
-  hash_user = hashFind(username);
-  if(hash_user == 0)
-  {
-    logger_info( "New user logged: %s\n", username);
-    user->sockets_fd[0] = sockfd;
-    user->chained_list_followers = NULL;
-    user->chained_list_notifications = NULL;
-    user->sessions_number = 1;
-    hashInsert(username, *user);
-  }
-  else if(hash_user->user.sessions_number<=2)
-  {
-    logger_info( "User in another session: %s\n", hash_user->username);
-    user->sockets_fd[1] = sockfd;
-    user->sessions_number ++;
-  }
-  else{
-    //TODO: Precisa barrar o usuário de conectar porque esta em mais de duas sessões
-  }
+    read(sockfd, (void *)username, sizeof(MAX_USERNAME_LENGTH));
+    hash_user = hashFind(username);
+    if (hash_user == 0)
+    {
+        logger_info("New user logged: %s\n", username);
+        user->sockets_fd[0] = sockfd;
+        user->chained_list_followers = NULL;
+        user->chained_list_notifications = NULL;
+        user->sessions_number = 1;
+        hashInsert(username, *user);
+    }
+    else if (hash_user->user.sessions_number <= 2)
+    {
+        logger_info("User in another session: %s\n", hash_user->username);
+        user->sockets_fd[1] = sockfd;
+        user->sessions_number++;
+    }
+    else
+    {
+        //TODO: Precisa barrar o usuário de conectar porque esta em mais de duas sessões
+    }
 
-  hashPrint();
+    hashPrint();
 }
 
 void process_message(PACKET packet)
 {
-  if(packet.command == FOLLOW)
-  {
-    logger_info( "Following user: %s\n", packet.payload);
-    //TODO follow the user
-  }
-  else if(packet.command == SEND)
-  {
-    logger_info( "Sending message: %s\n", packet.payload);
-    //TODO send the message to the followers
-  }
+    if (packet.command == FOLLOW)
+    {
+        logger_info("Following user: %s\n", packet.payload);
+        //TODO follow the user
+    }
+    else if (packet.command == SEND)
+    {
+        logger_info("Sending message: %s\n", packet.payload);
+        //TODO send the message to the followers
+    }
 }
 
 void *handle_connection(void *void_sockfd)
@@ -188,7 +195,6 @@ void *handle_connection(void *void_sockfd)
     return NULL;
 }
 
-
 void close_socket(void *void_socket)
 {
     int socket = *((int *)void_socket);
@@ -219,6 +225,7 @@ void handle_signals(void)
     struct sigaction sigint_action;
     sigint_action.sa_handler = sigint_handler;
     sigaction(SIGINT, &sigint_action, NULL);
+    sigaction(SIGINT, &sigint_action, NULL); // Activating it twice works, so don't remove this ¯\_(ツ)_/¯
 
     // Create a different thread to handle CTRL + D
     pthread_t *thread = (pthread_t *)malloc(sizeof(pthread_t));
