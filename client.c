@@ -70,8 +70,8 @@ void get_input_message(char *buffer)
             *p = 0;
         else
         {
-            scanf("%*[^\n]");
-            scanf("%*c");
+            (void) scanf("%*[^\n]");
+            (void) scanf("%*c");
         }
     }
     buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
         cleanup(ERROR_STARTING_CONNECTION);
     }
 
-    bytes_read = write(sockfd, (void *)user_handle, sizeof(MAX_USERNAME_LENGTH));
+    bytes_read = write(sockfd, (void *)user_handle, sizeof(char)*MAX_USERNAME_LENGTH);
     if (bytes_read < 0)
     {
         logger_error("On sending user handle\n");
