@@ -13,7 +13,7 @@ The server can be run with `bin/server` and will listen in the port `4000`
 
 ### Running the client
 
-A client can be run with `bin/client localhost` which will automatically connect to the `server` running on port `4000`
+A client can be run with `bin/client @handle` which will automatically connect to the `server` running on port `4000`
 
 
 ## Authors 🧙
