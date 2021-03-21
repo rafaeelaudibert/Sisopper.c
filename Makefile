@@ -1,5 +1,5 @@
 CC=gcc
-FLAGS=-Wall -O2 -g -pthread
+FLAGS=-Wall -g -pthread
 
 BIN_FOLDER=./bin
 SERVER_BIN=${BIN_FOLDER}/server
@@ -8,7 +8,8 @@ CLIENT_BIN=${BIN_FOLDER}/client
 all: server client
 	- echo "Done!"
 
-release: FLAGS += -D NO_DEBUG
+# On release, remove debug, activate O2 optimization and removes debug prints
+release: FLAGS += -g0 -O2 -D NO_DEBUG
 release: all
 
 # Server related
