@@ -6,14 +6,32 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <pthread.h>
+#include <signal.h>
+#include <assert.h>
 
 #include "config.h"
 #include "exit_errors.h"
 #include "logger.h"
+#include "notification.h"
 #include "packet.h"
 #include "user.h"
 
-int GLOBAL_ID = 0;
+typedef int boolean;
+#define FALSE 0
+#define TRUE 1
+
+static int received_sigint = FALSE;
+
+long long MESSAGE_GLOBAL_ID = 0;
+
+pthread_t read_thread_tid = -1;
+int sockfd = -1;
+
+void *handle_read(void *);
+void handle_signals(void);
+void sigint_handler(int);
+void cleanup(int);
 
 COMMAND identify_command(char *message)
 {
@@ -57,13 +75,11 @@ void get_input_message(char *buffer)
         }
     }
     buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
-
-    logger_info("Message: %s\n", buffer);
 }
 
 int main(int argc, char *argv[])
 {
-    int sockfd, bytes_read, command;
+    int bytes_read, command;
     struct sockaddr_in serv_addr;
 
     if (argc < 2)
@@ -103,7 +119,7 @@ int main(int argc, char *argv[])
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
     {
         logger_error("On setting the socket configurations\n");
-        exit(ERROR_CONFIGURATION_SOCKET);
+        cleanup(ERROR_CONFIGURATION_SOCKET);
     }
 
     int port = argc >= 4 ? atoi(argv[3]) : DEFAULT_PORT;
@@ -117,15 +133,14 @@ int main(int argc, char *argv[])
     if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
         logger_error("On connecting\n");
-        close(sockfd);
-        exit(ERROR_STARTING_CONNECTION);
+        cleanup(ERROR_STARTING_CONNECTION);
     }
 
     bytes_read = write(sockfd, (void *)user_handle, sizeof(MAX_USERNAME_LENGTH));
     if (bytes_read < 0)
     {
         logger_error("On sending user handle\n");
-        exit(ERROR_STARTING_CONNECTION);
+        cleanup(ERROR_STARTING_CONNECTION);
     }
 
     int can_login;
@@ -133,13 +148,17 @@ int main(int argc, char *argv[])
     if (bytes_read < 0)
     {
         logger_error("On reading user login status\n");
-        exit(ERROR_STARTING_CONNECTION);
+        cleanup(ERROR_STARTING_CONNECTION);
     }
     if (!can_login)
     {
         logger_error("You cannot login. Max conections exceeded (%d)\n", MAX_SESSIONS);
-        exit(ERROR_LOGIN);
+        cleanup(ERROR_LOGIN);
     }
+
+    // Create a thread responsible for receiving notifications from the server
+    pthread_create(&read_thread_tid, NULL, (void *(*)(void *)) & handle_read, (void *)&sockfd);
+    logger_debug("Created new thread %ld to handle this connection\n", read_thread_tid);
 
     char buffer[MAX_MESSAGE_SIZE + 2];
     while (1)
@@ -153,14 +172,14 @@ int main(int argc, char *argv[])
         command = identify_command(buffer);
         if (command == UNKNOWN)
         {
-            logger_info("Message unknown!\n");
+            logger_info("Message type unknown! Please prepend the message with FOLLOW or SEND!\n");
             continue;
         }
         strcpy(buffer, remove_command_from_message(command, buffer));
 
         PACKET packet = {
             .command = command,
-            .seqn = ++GLOBAL_ID,
+            .seqn = ++MESSAGE_GLOBAL_ID,
             .timestamp = time(NULL),
             .length = strlen(buffer),
         };
@@ -170,17 +189,71 @@ int main(int argc, char *argv[])
         bytes_read = write(sockfd, (void *)&packet, sizeof(PACKET));
         if (bytes_read < 0)
             logger_error("On writing to socket\n");
-
-        bzero(buffer, MAX_MESSAGE_SIZE + 2);
-
-        /* read from the socket */
-        bytes_read = read(sockfd, buffer, MAX_MESSAGE_SIZE);
-        if (bytes_read < 0)
-            logger_error("On reading from socket\n");
-
-        logger_debug("ACK: %s\n", buffer);
     }
 
+    assert(0);
+}
+
+void *handle_read(void *void_sockfd)
+{
+    NOTIFICATION notification;
+    int bytes_read, sockfd = *((int *)void_sockfd);
+
+    while (1)
+    {
+        bzero((void *)&notification, sizeof(NOTIFICATION));
+
+        /* read from the socket */
+        bytes_read = read(sockfd, (void *)&notification, sizeof(NOTIFICATION));
+        if (bytes_read < 0)
+        {
+            logger_error("[READ THREAD] On reading from socket\n");
+        }
+        else if (bytes_read == 0)
+        {
+            printf("\n"); // Add this empty line to skip the message prompt
+            logger_info("[READ THREAD] Server closed connection\n");
+
+            // Send a SIGINT to the parent
+            kill(getpid(), SIGINT);
+
+            // TODO: End the client interface
+            return NULL;
+        }
+        else
+        {
+            logger_info("[READ THREAD] Received notification from server: %s\n", notification.message);
+        }
+    };
+
+    return NULL;
+}
+
+void handle_signals(void)
+{
+    struct sigaction sigint_action;
+    sigint_action.sa_handler = sigint_handler;
+    sigaction(SIGINT, &sigint_action, NULL);
+    sigaction(SIGINT, &sigint_action, NULL); // Activating it twice works, so don't remove this ¯\_(ツ)_/¯
+}
+
+void sigint_handler(int _sigint)
+{
+    if (!received_sigint)
+    {
+        logger_warn("SIGINT received, closing descriptors and finishing...\n");
+        cleanup(0);
+        received_sigint = TRUE;
+    }
+    else
+    {
+        logger_error("Already received SIGINT... Waiting to finish cleaning up...\n");
+    }
+}
+
+void cleanup(int exit_code)
+{
+    pthread_cancel(read_thread_tid);
     close(sockfd);
-    return 0;
+    exit(exit_code);
 }

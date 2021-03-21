@@ -5,6 +5,7 @@
         "strings.h": "c",
         "stdlib.h": "c",
         "config.h": "c",
-        "logger.h": "c"
+        "logger.h": "c",
+        "socket.h": "c"
     }
 }

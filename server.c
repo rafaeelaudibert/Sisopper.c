@@ -108,6 +108,8 @@ void cleanup(int exit_code)
 {
     chained_list_iterate(chained_list_threads, &cancel_thread);
     chained_list_iterate(chained_list_sockets_fd, &close_socket);
+    chained_list_free(chained_list_threads);
+    chained_list_free(chained_list_sockets_fd);
 
     close(sockfd);
 
@@ -174,7 +176,10 @@ void process_message(PACKET packet)
     if (packet.command == FOLLOW)
     {
         logger_info("Following user: %s\n", packet.payload);
-        //TODO follow the user
+
+        // TODO: SEÇÃO CRÍTICA DE FOLLOW
+
+        // TODO: END SEÇÃO CRÍTICA DE FOLLOW
     }
     else if (packet.command == SEND)
     {
@@ -291,7 +296,7 @@ void *handle_eof(void *arg)
     {
     }
 
-    // Send a signal to the parent
+    // Send a SIGINT to the parent
     kill(getpid(), SIGINT);
 
     return NULL;
