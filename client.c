@@ -22,6 +22,7 @@ typedef int boolean;
 #define TRUE 1
 
 static int received_sigint = FALSE;
+static int oversized_message = FALSE;
 
 long long MESSAGE_GLOBAL_ID = 0;
 
@@ -63,13 +64,14 @@ char *remove_command_from_message(int command, char *message)
 void get_input_message(char *buffer)
 {
     /* Based on https://stackoverflow.com/a/38768287 */
-    if (fgets(buffer, MAX_MESSAGE_SIZE, stdin))
+    if (fgets(buffer, MAX_MESSAGE_SIZE + NUMBER_OF_CHARS_IN_SEND + 2, stdin))
     {
         char *p;
         if ((p = strchr(buffer, '\n')))
             *p = 0;
         else
         {
+            oversized_message = TRUE;
             (void) scanf("%*[^\n]");
             (void) scanf("%*c");
         }
@@ -160,19 +162,24 @@ int main(int argc, char *argv[])
     pthread_create(&read_thread_tid, NULL, (void *(*)(void *)) & handle_read, (void *)&sockfd);
     logger_debug("Created new thread %ld to handle this connection\n", read_thread_tid);
 
-    char buffer[MAX_MESSAGE_SIZE + 2];
+    // Message should be at most MAX_MESSAGE_SIZE characters, without considering commands.
+    char buffer[MAX_MESSAGE_SIZE + NUMBER_OF_CHARS_IN_SEND + 2];
     while (1)
     {
-        // TODO: Configure so that if the person enters more than 128 characters,
-        // it doesn't send as the next text message automatically
         printf("💬 Enter the message: ");
-        bzero(buffer, MAX_MESSAGE_SIZE + 2);
+        bzero(buffer, MAX_MESSAGE_SIZE + NUMBER_OF_CHARS_IN_SEND + 2);
         get_input_message(buffer);
 
         command = identify_command(buffer);
         if (command == UNKNOWN)
         {
             logger_info("Message type unknown! Please prepend the message with FOLLOW or SEND!\n");
+            continue;
+        }
+        if (command == SEND && oversized_message)
+        {
+            logger_info("Your message is too big!\n");
+            oversized_message = FALSE;
             continue;
         }
         strcpy(buffer, remove_command_from_message(command, buffer));
