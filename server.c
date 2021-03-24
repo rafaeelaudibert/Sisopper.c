@@ -175,10 +175,10 @@ USER *login_user(int sockfd)
 }
 
 
-void print_username(void* void_parameter)
+void print_username(void *void_parameter)
 {
     logger_info("HERE111\n");
-    char* parameter = *((char**) void_parameter);
+    char* parameter = ((char*) void_parameter);
     logger_info("HERE333\n");
     printf("%s", parameter);
     logger_info("HERE444\n");
