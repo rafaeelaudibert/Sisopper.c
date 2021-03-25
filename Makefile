@@ -13,22 +13,22 @@ release: FLAGS += -g0 -O2 -D NO_DEBUG
 release: all
 
 # Server related
-server: server.o chained_list.o logger.o user.o
-	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o user.o
+server: server.o chained_list.o logger.o hash.o
+	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o hash.o
 
 server.o:
 	${CC} ${FLAGS} -c server.c
 
 # Client related
-client: client.o logger.o  user.o
-	${CC} ${FLAGS} -o ${CLIENT_BIN} client.o logger.o  user.o
+client: client.o logger.o  hash.o
+	${CC} ${FLAGS} -o ${CLIENT_BIN} client.o logger.o  hash.o
 
 client.o:
 	${CC} ${FLAGS} -c client.c
 
 # Hash table Data Structure
-user.o: chained_list.o user.c
-	${CC} ${FLAGS} -c user.c
+hash.o: chained_list.o
+	${CC} ${FLAGS} -c hash.c
 
 # Chained List Data Structure
 chained_list.o: chained_list.c
