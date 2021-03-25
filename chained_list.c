@@ -101,6 +101,10 @@ void chained_list_free(CHAINED_LIST *list)
 /// @param item_print_function A function which receives each item val, to handle how to print the val
 void chained_list_print(CHAINED_LIST *list, void (*item_print_function)(void *))
 {
+#ifdef NO_DEBUG
+    return;
+#endif
+
     printf("[");
     while (list)
     {

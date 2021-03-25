@@ -99,6 +99,10 @@ HASH_NODE *hash_insert(HASH_TABLE table, char *key, void *value)
 
 void hash_print(HASH_TABLE table)
 {
+#ifdef NO_DEBUG
+    return;
+#endif
+
     if (!table)
         return;
 
