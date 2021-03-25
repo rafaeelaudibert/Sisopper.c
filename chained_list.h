@@ -10,6 +10,7 @@ typedef struct chained_list
 CHAINED_LIST *chained_list_create(void *val);
 CHAINED_LIST *chained_list_reverse(CHAINED_LIST *list);
 CHAINED_LIST *chained_list_append_end(CHAINED_LIST *list, void *val);
+void *chained_list_find(CHAINED_LIST *list, void *val, int(item_compare_function)(void *, void *));
 void chained_list_free(CHAINED_LIST *list);
 void chained_list_print(CHAINED_LIST *list, void (*item_print_function)(void *));
 void chained_list_iterate(CHAINED_LIST *list, void (*iterate_function)(void *));

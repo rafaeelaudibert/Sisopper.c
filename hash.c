@@ -29,7 +29,7 @@ void hash_free(HASH_TABLE table)
             next_node = node->next;
 
             // Free the text, and the node itself
-            free(node->text);
+            free(node->key);
             free(node);
 
             // Now we will look for the next node
@@ -41,32 +41,32 @@ void hash_free(HASH_TABLE table)
     free(table);
 }
 
-int hash_address(char *text)
+int hash_address(char *key)
 {
     int address = 1;
-    int text_idx;
+    int key_idx;
 
     // Initializing in one, and taking modulo (HASH_SIZE + 1)
     // we are in range [1, HASH_SIZE + 1)
-    for (text_idx = 0; text_idx < strlen(text); text_idx++)
-        address = (address * text[text_idx]) % HASH_SIZE + 1;
+    for (key_idx = 0; key_idx < strlen(key); key_idx++)
+        address = (address * key[key_idx]) % HASH_SIZE + 1;
 
     // We decrement 1 to be in the range [0, HASH_SIZE),
     //so that we can access the table correctly
     return address - 1;
 }
 
-HASH_NODE *hash_find(HASH_TABLE table, char *text)
+HASH_NODE *hash_find(HASH_TABLE table, char *key)
 {
     if (!table)
         return NULL;
 
-    int address = hash_address(text);
+    int address = hash_address(key);
     HASH_NODE *node = table[address];
 
     while (node)
     {
-        if (strcmp(text, node->text) == 0)
+        if (strcmp(key, node->key) == 0)
             return node;
 
         node = node->next;
@@ -75,22 +75,21 @@ HASH_NODE *hash_find(HASH_TABLE table, char *text)
     return NULL;
 }
 
-HASH_NODE *hash_insert(HASH_TABLE table, char *text, void *content, int type)
+HASH_NODE *hash_insert(HASH_TABLE table, char *key, void *value)
 {
     if (!table)
         return NULL;
 
-    HASH_NODE *new_node = hash_find(table, text);
+    HASH_NODE *new_node = hash_find(table, key);
 
     if (!new_node)
     {
         new_node = (HASH_NODE *)calloc(1, sizeof(HASH_NODE));
-        new_node->content = content;
-        new_node->type = type;
-        new_node->text = (char *)calloc(strlen(text) + 1, sizeof(char));
-        strcpy(new_node->text, text);
+        new_node->value = value;
+        new_node->key = (char *)calloc(strlen(key) + 1, sizeof(char));
+        strcpy(new_node->key, key);
 
-        int address = hash_address(text);
+        int address = hash_address(key);
         new_node->next = table[address];
         table[address] = new_node;
     }
@@ -100,6 +99,10 @@ HASH_NODE *hash_insert(HASH_TABLE table, char *text, void *content, int type)
 
 void hash_print(HASH_TABLE table)
 {
+#ifdef NO_DEBUG
+    return;
+#endif
+
     if (!table)
         return;
 
@@ -110,9 +113,8 @@ void hash_print(HASH_TABLE table)
     for (int table_idx = 0; table_idx < HASH_SIZE; table_idx++)
         for (node = table[table_idx], list_idx = 0; node; node = node->next, list_idx++)
             printf(
-                "Table[%d][%d] -> %s (Type %d)\n",
+                "Table[%d][%d] -> %s\n",
                 table_idx,
                 list_idx,
-                node->text,
-                node->type);
+                node->key);
 }

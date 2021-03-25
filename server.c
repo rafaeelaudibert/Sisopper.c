@@ -15,6 +15,7 @@
 #include "logger.h"
 #include "packet.h"
 #include "user.h"
+#include "hash.h"
 
 #include "config.h"
 
@@ -32,15 +33,19 @@ void handle_signals(void);
 void *handle_eof(void *);
 void cleanup(int);
 USER *login_user(int sockfd);
-void process_message(PACKET packet);
+void process_message(PACKET *packet, USER *user);
+void print_username(void *void_parameter);
+void follow_user(char *user_to_follow_username, char *current_user_username);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
 int sockfd = 0;
 
+HASH_TABLE user_hash_table = NULL;
+
 int main(int argc, char *argv[])
 {
-    hashInit();
+    user_hash_table = hash_init();
     logger_debug("Initializing on debug mode!\n");
 
     handle_signals();
@@ -132,7 +137,7 @@ USER *login_user(int sockfd)
 {
     char username[MAX_USERNAME_LENGTH];
 
-    int bytes_read = read(sockfd, (void *)username, sizeof(char)*MAX_USERNAME_LENGTH);
+    int bytes_read = read(sockfd, (void *)username, sizeof(char) * MAX_USERNAME_LENGTH);
     if (bytes_read < 0)
     {
         logger_error("Couldn't read username for socket %d\n", sockfd);
@@ -140,50 +145,96 @@ USER *login_user(int sockfd)
     }
 
     //TODO BEGIN seção critica
-    HASH_USER *hash_user = hashFind(username);
-    if (!hash_user)
+    HASH_NODE *hash_node = hash_find(user_hash_table, username);
+    if (hash_node == NULL)
     {
         logger_info("New user logged: %s\n", username);
         USER *user = (USER *)malloc(sizeof(USER));
 
+        strcpy(user->username, username);
         user->sockets_fd[0] = sockfd;
         user->sockets_fd[1] = -1;
         user->chained_list_followers = NULL;
         user->chained_list_notifications = NULL;
         user->sessions_number = 1;
-        hash_user = hashInsert(username, *user);
+        hash_node = hash_insert(user_hash_table, username, (void *)user);
 
-        return &hash_user->user;
+        return user;
     }
-    else if (hash_user->user.sessions_number < MAX_SESSIONS)
-    {
-        int free_socket_spot = get_free_socket_spot(hash_user->user.sockets_fd);
-        logger_info("User in another session: %s\n", hash_user->username);
-        logger_info("sessions: %d\n", hash_user->user.sessions_number);
-        logger_info("Saving socket in position: %d\n", free_socket_spot);
-        hash_user->user.sockets_fd[free_socket_spot] = sockfd;
-        hash_user->user.sessions_number++;
 
-        return &hash_user->user;
+    USER *user = (USER *)hash_node->value;
+    if (user->sessions_number < MAX_SESSIONS)
+    {
+        int free_socket_spot = get_free_socket_spot(user->sockets_fd);
+        logger_info("User in another session: %s\n", user->username);
+        logger_info("sessions: %d\n", user->sessions_number);
+        logger_info("Saving socket in position: %d\n", free_socket_spot);
+        user->sockets_fd[free_socket_spot] = sockfd;
+        user->sessions_number++;
+
+        return user;
     }
     // TODO: END SEÇÃO CRÍTICA
 
     return NULL;
 }
 
-void process_message(PACKET packet)
+void print_username(void *void_parameter)
 {
-    if (packet.command == FOLLOW)
+    char *parameter = ((char *)void_parameter);
+    printf("%s", parameter);
+}
+
+void follow_user(char *user_to_follow_username, char *current_user_username)
+{
+    if (strcmp(user_to_follow_username, current_user_username) == 0)
     {
-        logger_info("Following user: %s\n", packet.payload);
+        logger_info("User tried following itself, won't work!");
+
+        // TODO: What to do in this case, just allow it?
+    }
+
+    HASH_NODE *followed_user_node = hash_find(user_hash_table, user_to_follow_username);
+    if (followed_user_node == NULL)
+    {
+        logger_error("Could not follow the user %s. It doesn't exist\n", user_to_follow_username);
+    }
+    else
+    {
+        USER *user = (USER *)followed_user_node->value;
+        char *dup_current_user_username = strdup(current_user_username);
+        char *list_current_user_username = (char *)chained_list_find(
+            user->chained_list_followers,
+            dup_current_user_username,
+            (int (*)(void *, void *))strcmp);
+
+        if (list_current_user_username == NULL)
+        {
+            user->chained_list_followers = chained_list_append_end(user->chained_list_followers, dup_current_user_username);
+            logger_debug("New list of followers: ");
+            chained_list_print(user->chained_list_followers, &print_username);
+        }
+        else
+        {
+            logger_error("The user '%s' already follows '%s'\n", current_user_username, user_to_follow_username);
+        }
+    }
+}
+
+void process_message(PACKET *packet, USER *user)
+{
+    if (packet->command == FOLLOW)
+    {
+        logger_info("Following user: %s\n", packet->payload);
+        follow_user(packet->payload, user->username);
 
         // TODO: SEÇÃO CRÍTICA DE FOLLOW
 
         // TODO: END SEÇÃO CRÍTICA DE FOLLOW
     }
-    else if (packet.command == SEND)
+    else if (packet->command == SEND)
     {
-        logger_info("Sending message: %s\n", packet.payload);
+        logger_info("Sending message: %s\n", packet->payload);
         //TODO send the message to the followers
     }
 }
@@ -193,8 +244,8 @@ void *handle_connection(void *void_sockfd)
     PACKET packet;
     int bytes_read, sockfd = *((int *)void_sockfd);
 
-    USER *user = login_user(sockfd);
-    boolean can_login = user != NULL;
+    USER *current_user = login_user(sockfd);
+    boolean can_login = current_user != NULL;
 
     bytes_read = write(sockfd, &can_login, sizeof(can_login));
     if (bytes_read < 0)
@@ -223,20 +274,15 @@ void *handle_connection(void *void_sockfd)
             logger_info("[Socket %d] Client closed connection\n", sockfd);
 
             /* TODO: Seção crítica */
-            user->sessions_number--;
+            current_user->sessions_number--;
             /* TODO: END seção crítica */
 
             return NULL;
         }
         else
         {
-            process_message(packet);
             logger_info("[Socket %d] Here is the message: %s\n", sockfd, packet.payload);
-
-            /* write the ack in the socket */
-            bytes_read = write(sockfd, "I got your message", 18);
-            if (bytes_read < 0)
-                logger_error("[Socket %d] On writing ACK to socket\n", sockfd);
+            process_message(&packet, current_user);
         }
     };
 
