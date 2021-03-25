@@ -202,8 +202,22 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
     else
     {
         USER *user = (USER *)followed_user_node->value;
-        user->chained_list_followers = chained_list_append_end(user->chained_list_followers, strdup(current_user_username));
-        chained_list_print(user->chained_list_followers, &print_username);
+        char *dup_current_user_username = strdup(current_user_username);
+        char *list_current_user_username = (char *)chained_list_find(
+            user->chained_list_followers,
+            dup_current_user_username,
+            (int (*)(void *, void *))strcmp);
+
+        if (list_current_user_username == NULL)
+        {
+            user->chained_list_followers = chained_list_append_end(user->chained_list_followers, dup_current_user_username);
+            logger_debug("New list of followers: ");
+            chained_list_print(user->chained_list_followers, &print_username);
+        }
+        else
+        {
+            logger_error("The user '%s' already follows '%s'\n", current_user_username, user_to_follow_username);
+        }
     }
 }
 
