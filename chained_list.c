@@ -60,6 +60,26 @@ CHAINED_LIST *chained_list_append_end(CHAINED_LIST *list, void *val)
     return list;
 }
 
+/// Finds a value in the CHAINED_LIST
+///
+/// @param list CHAINED_LIST* list which will have a element searched
+/// @param val void* value to be searched on [list]
+/// @param search_function function to be used to compare the values,
+///
+/// @returns The void* node which corresponds to it, or NULL if can't find
+void *chained_list_find(CHAINED_LIST *list, void *val, int(item_compare_function)(void *, void *))
+{
+    while (list)
+    {
+        if (item_compare_function(val, list->val) == 0)
+            return list->val;
+
+        list = list->next;
+    }
+
+    return NULL;
+}
+
 /// Frees entirely a CHAINED_LIST*. It DOES NOT frees the val inside of it
 ///
 /// @param list A CHAINED_LIST* to be freed
