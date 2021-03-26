@@ -60,6 +60,23 @@ CHAINED_LIST *chained_list_append_end(CHAINED_LIST *list, void *val)
     return list;
 }
 
+/// Appends a value to the start of a CHAINED_LIST
+///
+/// @param list CHAINED_LIST* list which will have a element inserted
+/// @param val void* value which will be added to the front to the [list]
+///
+/// @returns The appended CHAINED_LIST* start node
+CHAINED_LIST *chained_list_append_start(CHAINED_LIST *list, void *val)
+{
+    CHAINED_LIST *new_list = chained_list_create(val);
+
+    if (!list)
+        return new_list;
+
+    new_list->next = list;
+    return new_list;
+}
+
 /// Finds a value in the CHAINED_LIST
 ///
 /// @param list CHAINED_LIST* list which will have a element searched
