@@ -1,5 +1,6 @@
 CC=gcc
 FLAGS=-Wall -g -pthread
+LIBRARIES=-lncurses
 
 BIN_FOLDER=./bin
 SERVER_BIN=${BIN_FOLDER}/server
@@ -14,17 +15,20 @@ release: all
 
 # Server related
 server: server.o chained_list.o logger.o hash.o
-	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o hash.o
+	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o hash.o ${LIBRARIES}
 
 server.o:
 	${CC} ${FLAGS} -c server.c
 
 # Client related
-client: client.o logger.o  hash.o
-	${CC} ${FLAGS} -o ${CLIENT_BIN} client.o logger.o  hash.o
+client: client.o logger.o  hash.o ui.o chained_list.o
+	${CC} ${FLAGS} -o ${CLIENT_BIN} client.o logger.o  hash.o ui.o chained_list.o ${LIBRARIES}
 
 client.o:
 	${CC} ${FLAGS} -c client.c
+
+ui.o:
+	${CC} ${FLAGS} -c ui.c
 
 # Hash table Data Structure
 hash.o: chained_list.o

@@ -16,13 +16,13 @@
 #include "notification.h"
 #include "packet.h"
 #include "user.h"
+#include "ui.h"
 
 typedef int boolean;
 #define FALSE 0
 #define TRUE 1
 
 static int received_sigint = FALSE;
-static int oversized_message = FALSE;
 
 long long MESSAGE_GLOBAL_ID = 0;
 
@@ -37,16 +37,9 @@ void cleanup(int);
 COMMAND identify_command(char *message)
 {
     if (strncmp(message, "SEND ", NUMBER_OF_CHARS_IN_SEND) == 0)
-    {
-        logger_info("Its a SEND message\n");
         return SEND;
-    }
-
-    else if (strncmp(message, "FOLLOW ", NUMBER_OF_CHARS_IN_FOLLOW) == 0)
-    {
-        logger_info("Its a FOLLOW message\n");
+    if (strncmp(message, "FOLLOW ", NUMBER_OF_CHARS_IN_FOLLOW) == 0)
         return FOLLOW;
-    }
 
     return UNKNOWN;
 }
@@ -59,24 +52,6 @@ char *remove_command_from_message(int command, char *message)
         message = message + NUMBER_OF_CHARS_IN_SEND;
 
     return message;
-}
-
-void get_input_message(char *buffer)
-{
-    /* Based on https://stackoverflow.com/a/38768287 */
-    if (fgets(buffer, MAX_MESSAGE_SIZE + NUMBER_OF_CHARS_IN_SEND + 2, stdin))
-    {
-        char *p;
-        if ((p = strchr(buffer, '\n')))
-            *p = 0;
-        else
-        {
-            oversized_message = TRUE;
-            (void) scanf("%*[^\n]");
-            (void) scanf("%*c");
-        }
-    }
-    buffer[strcspn(buffer, "\r\n")] = '\0'; // Replaces the first occurence of /[\n\r]/g with a \0
 }
 
 int main(int argc, char *argv[])
@@ -102,25 +77,46 @@ int main(int argc, char *argv[])
             user_handle);
         exit(INCORRECT_HANDLE_ERROR);
     }
-    logger_debug("Will connect with handle %s\n", user_handle);
+
+    UI_start(user_handle);
 
     struct hostent *server = argc >= 3 ? gethostbyname(argv[2]) : gethostbyname(DEFAULT_HOST);
     if (server == NULL)
     {
-        logger_error("No such host\n");
+        char *error_message = "No such host";
+        UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+        ui_error_message->timestamp = time(NULL);
+        ui_error_message->message = strdup(error_message);
+        ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+        UI_add_new_message(ui_error_message);
+
+        UI_end();
         exit(INCORRECT_HOST_ERROR);
     }
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        logger_error("On opening socket\n");
+        char *error_message = "On opening socket";
+        UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+        ui_error_message->timestamp = time(NULL);
+        ui_error_message->message = strdup(error_message);
+        ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+        UI_add_new_message(ui_error_message);
+
+        UI_end();
         exit(ERROR_OPEN_SOCKET);
     }
 
-    int true = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
+    int this_true = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &this_true, sizeof(int)) == -1)
     {
-        logger_error("On setting the socket configurations\n");
+        char *error_message = "On setting the socket configurations";
+        UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+        ui_error_message->timestamp = time(NULL);
+        ui_error_message->message = strdup(error_message);
+        ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+        UI_add_new_message(ui_error_message);
+
         cleanup(ERROR_CONFIGURATION_SOCKET);
     }
 
@@ -130,18 +126,29 @@ int main(int argc, char *argv[])
     serv_addr.sin_port = htons(port);
     serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
     bzero(&(serv_addr.sin_zero), 8);
-    logger_debug("Will connect to %s:%d\n", server->h_name, port);
 
     if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        logger_error("On connecting\n");
+        char *error_message = "On connecting";
+        UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+        ui_error_message->timestamp = time(NULL);
+        ui_error_message->message = strdup(error_message);
+        ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+        UI_add_new_message(ui_error_message);
+
         cleanup(ERROR_STARTING_CONNECTION);
     }
 
-    bytes_read = write(sockfd, (void *)user_handle, sizeof(char)*MAX_USERNAME_LENGTH);
+    bytes_read = write(sockfd, (void *)user_handle, sizeof(char) * MAX_USERNAME_LENGTH);
     if (bytes_read < 0)
     {
-        logger_error("On sending user handle\n");
+        char *error_message = "On sending user handle";
+        UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+        ui_error_message->timestamp = time(NULL);
+        ui_error_message->message = strdup(error_message);
+        ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+        UI_add_new_message(ui_error_message);
+
         cleanup(ERROR_STARTING_CONNECTION);
     }
 
@@ -149,39 +156,49 @@ int main(int argc, char *argv[])
     bytes_read = read(sockfd, (void *)&can_login, sizeof(can_login));
     if (bytes_read < 0)
     {
-        logger_error("On reading user login status\n");
+        char *error_message = "On reading user login status";
+        UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+        ui_error_message->timestamp = time(NULL);
+        ui_error_message->message = strdup(error_message);
+        ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+        UI_add_new_message(ui_error_message);
+
         cleanup(ERROR_STARTING_CONNECTION);
     }
     if (!can_login)
     {
-        logger_error("You cannot login. Max conections exceeded (%d)\n", MAX_SESSIONS);
+        char *error_message = (char *)calloc(60, sizeof(char));
+        sprintf(error_message, "You cannot login. Max conections exceeded (%d)\n", MAX_SESSIONS);
+
+        UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+        ui_error_message->timestamp = time(NULL);
+        ui_error_message->message = strdup(error_message);
+        ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+        UI_add_new_message(ui_error_message);
+
         cleanup(ERROR_LOGIN);
     }
 
     // Create a thread responsible for receiving notifications from the server
     pthread_create(&read_thread_tid, NULL, (void *(*)(void *)) & handle_read, (void *)&sockfd);
-    logger_debug("Created new thread %ld to handle this connection\n", read_thread_tid);
 
     // Message should be at most MAX_MESSAGE_SIZE characters, without considering commands.
-    char buffer[MAX_MESSAGE_SIZE + NUMBER_OF_CHARS_IN_SEND + 2];
     while (1)
     {
-        printf("💬 Enter the message: ");
-        bzero(buffer, MAX_MESSAGE_SIZE + NUMBER_OF_CHARS_IN_SEND + 2);
-        get_input_message(buffer);
+        char *buffer = UI_get_text(MAX_MESSAGE_SIZE + NUMBER_OF_CHARS_IN_SEND);
 
         command = identify_command(buffer);
         if (command == UNKNOWN)
         {
-            logger_info("Message type unknown! Please prepend the message with FOLLOW or SEND!\n");
+            char *info_message = "Message type unknown! Please prepend the message with FOLLOW or SEND!";
+            UI_MESSAGE *ui_info_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+            ui_info_message->timestamp = time(NULL);
+            ui_info_message->message = strdup(info_message);
+            ui_info_message->type = UI_MESSAGE_TYPE__INFO;
+            UI_add_new_message(ui_info_message);
             continue;
         }
-        if (command == SEND && oversized_message)
-        {
-            logger_info("Your message is too big!\n");
-            oversized_message = FALSE;
-            continue;
-        }
+
         strcpy(buffer, remove_command_from_message(command, buffer));
 
         PACKET packet = {
@@ -195,7 +212,24 @@ int main(int argc, char *argv[])
         /* write in the socket */
         bytes_read = write(sockfd, (void *)&packet, sizeof(PACKET));
         if (bytes_read < 0)
-            logger_error("On writing to socket\n");
+        {
+            char *error_message = "On writing to socket";
+            UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+            ui_error_message->timestamp = time(NULL);
+            ui_error_message->message = strdup(error_message);
+            ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+            UI_add_new_message(ui_error_message);
+        }
+
+        // TODO: REMOVE THIS FAKE MESSAGE
+        char *fake_message = "Lorem ipsum dolor sit amet";
+        char *user_message = "@rafael";
+        UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+        ui_error_message->timestamp = time(NULL);
+        ui_error_message->message = strdup(fake_message);
+        ui_error_message->type = UI_MESSAGE_TYPE__MESSAGE;
+        ui_error_message->author = strdup(user_message);
+        UI_add_new_message(ui_error_message);
     }
 
     assert(0);
@@ -260,7 +294,13 @@ void sigint_handler(int _sigint)
 
 void cleanup(int exit_code)
 {
-    pthread_cancel(read_thread_tid);
-    close(sockfd);
+    if (read_thread_tid != -1)
+        pthread_cancel(read_thread_tid);
+
+    if (sockfd != -1)
+        close(sockfd);
+
+    UI_end();
+
     exit(exit_code);
 }

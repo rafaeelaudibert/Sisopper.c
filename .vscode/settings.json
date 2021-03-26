@@ -6,6 +6,9 @@
         "stdlib.h": "c",
         "config.h": "c",
         "logger.h": "c",
-        "socket.h": "c"
+        "socket.h": "c",
+        "packet.h": "c",
+        "ui.h": "c",
+        "cstdlib": "c"
     }
 }
