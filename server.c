@@ -153,11 +153,13 @@ USER *login_user(int sockfd)
 
         strcpy(user->username, username);
         user->sockets_fd[0] = sockfd;
-        user->sockets_fd[1] = -1;
         user->chained_list_followers = NULL;
         user->chained_list_notifications = NULL;
         user->sessions_number = 1;
         hash_node = hash_insert(user_hash_table, username, (void *)user);
+
+        for (int i = 1; i < MAX_SESSIONS; i++)
+            user->sockets_fd[i] = -1;
 
         return user;
     }
