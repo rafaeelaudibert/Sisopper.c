@@ -66,14 +66,14 @@ int main(int argc, char *argv[])
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        logger_error("On opening socket\n");
+        logger_error("When opening socket\n");
         exit(ERROR_OPEN_SOCKET);
     }
 
     int true = 1;
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
     {
-        logger_error("On setting the socket configurations\n");
+        logger_error("When setting the socket configurations\n");
         exit(ERROR_CONFIGURATION_SOCKET);
     }
 
@@ -84,17 +84,18 @@ int main(int argc, char *argv[])
 
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        logger_error("On binding socket\n");
+        logger_error("When binding socket\n");
         cleanup(ERROR_BINDING_SOCKET);
     }
 
     if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
     {
-        logger_error("On starting to listen");
+        logger_error("When starting to listen");
         cleanup(ERROR_LISTEN);
     }
     logger_info("Listening on port %d...\n", DEFAULT_PORT);
 
+    // This loop is responsible for keep accepting new connections from clients
     while (true)
     {
         int *newsockfd = (int *)malloc(sizeof(int));
@@ -102,7 +103,7 @@ int main(int argc, char *argv[])
 
         if (*newsockfd == -1)
         {
-            logger_error("On accept\n");
+            logger_error("When accepting connection\n");
             cleanup(ERROR_ACCEPT);
         }
 
@@ -312,7 +313,7 @@ void process_message(PACKET *packet, USER *user)
     }
     else if (packet->command == SEND)
     {
-        logger_info("Sending message: %s\n", packet->payload);
+        logger_info("Received message: %s\n", packet->payload);
     }
 }
 
@@ -341,7 +342,6 @@ void send_message(NOTIFICATION *notification, char *username)
             }
         }
     }
-
     UNLOCK(user->mutex);
 }
 
@@ -356,7 +356,7 @@ void *handle_connection(void *void_sockfd)
     bytes_read = write(sockfd, &can_login, sizeof(can_login));
     if (bytes_read < 0)
     {
-        logger_error("[Socket %d] On sending login ACK/NACK (%d)\n", sockfd, can_login);
+        logger_error("[Socket %d] When sending login ACK/NACK (%d)\n", sockfd, can_login);
         return NULL;
     }
     if (!can_login)
@@ -373,7 +373,7 @@ void *handle_connection(void *void_sockfd)
         bytes_read = read(sockfd, (void *)&packet, sizeof(PACKET));
         if (bytes_read < 0)
         {
-            logger_error("[Socket %d] On reading from socket\n", sockfd);
+            logger_error("[Socket %d] When reading from socket\n", sockfd);
         }
         else if (bytes_read == 0)
         {
@@ -385,6 +385,7 @@ void *handle_connection(void *void_sockfd)
             for (int i = 0; i < MAX_SESSIONS; i++)
                 if (current_user->sockets_fd[i] == sockfd)
                 {
+                    logger_info("[Socket %d] Freed %d socket position\n", i);
                     current_user->sockets_fd[i] = -1;
                     break;
                 }
