@@ -1,6 +1,8 @@
 #ifndef USER_H_
 #define USER_H_
 
+#include <pthread.h>
+
 #include "chained_list.h"
 #include "config.h"
 
@@ -11,6 +13,7 @@ typedef struct user
   CHAINED_LIST *chained_list_followers;
   CHAINED_LIST *chained_list_notifications;
   int sessions_number;
+  pthread_mutex_t mutex;
 } USER;
 
 #endif // USER_H_
