@@ -2,10 +2,10 @@
  
 WIP Twitter-like application with a server and several clients communicating through UNIX sockets.
 
-
 ## Usage
 
 You can compile the aplication running `make`. This application was only tested on Linux (Ubuntu and Deepin).
+Also, `<ncurses.h>` is required to compile this project.
 
 ### Running the server
 
