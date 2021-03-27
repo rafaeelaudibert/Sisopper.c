@@ -379,9 +379,16 @@ void *handle_connection(void *void_sockfd)
         {
             logger_info("[Socket %d] Client closed connection\n", sockfd);
 
-            /* TODO: Seção crítica */
+            // Lock user while playing around with sockets list
+            LOCK(current_user->mutex);
             current_user->sessions_number--;
-            /* TODO: END seção crítica */
+            for (int i = 0; i < MAX_SESSIONS; i++)
+                if (current_user->sockets_fd[i] == sockfd)
+                {
+                    current_user->sockets_fd[i] = -1;
+                    break;
+                }
+            UNLOCK(current_user->mutex);
 
             return NULL;
         }
