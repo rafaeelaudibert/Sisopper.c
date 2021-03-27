@@ -355,6 +355,7 @@ void send_message(NOTIFICATION *notification, char *username)
     if (!node)
     {
         logger_error("When sending message to non existent username %s\n", username);
+        return;
     }
 
     // Gets the user and lock its mutex
@@ -369,14 +370,15 @@ void send_message(NOTIFICATION *notification, char *username)
             if (socket_fd != -1)
             {
                 if (write(socket_fd, notification, sizeof(NOTIFICATION)) < 0)
-                {
                     logger_error("When sending notification %d to %s through socket %d\n", notification->id, user->username, socket_fd);
-                }
+                else
+                    logger_info("Sent notification %d with message '%s' to %s on socket %d\n", notification->id, notification->message, username, socket_fd);
             }
         }
     }
     else
     {
+        logger_info("Added notification %ld with message '%s' to be sent later to %s\n", notification->id, notification->message, username);
         // Add to the notifications which must be sent to this user later on
         LOCK(MUTEX_PENDING_NOTIFICATIONS);
         user->pending_notifications = chained_list_append_end(user->pending_notifications, (void *)notification);
@@ -411,7 +413,11 @@ void *handle_connection(void *void_sockfd)
     CHAINED_LIST *pending_notification = current_user->pending_notifications;
     while (pending_notification)
     {
-        send_message((NOTIFICATION *)pending_notification->val, current_user->username);
+        NOTIFICATION *notification = (NOTIFICATION *)pending_notification->val;
+
+        logger_info("[Socket %d] Sending pending notification from %d to %d\n", sockfd, notification->author, current_user->username);
+        send_message(notification, current_user->username);
+
         pending_notification = pending_notification->next;
     }
 
