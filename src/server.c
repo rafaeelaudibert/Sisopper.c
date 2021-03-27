@@ -17,6 +17,7 @@
 #include "user.h"
 #include "hash.h"
 #include "notification.h"
+#include "savefile.h"
 
 #include "config.h"
 
@@ -58,7 +59,7 @@ unsigned long long GLOBAL_NOTIFICATION_ID = 0;
 
 int main(int argc, char *argv[])
 {
-    user_hash_table = hash_init();
+    user_hash_table = read_savefile();
     logger_debug("Initializing on debug mode!\n");
 
     handle_signals();
@@ -125,6 +126,8 @@ int main(int argc, char *argv[])
 
 void cleanup(int exit_code)
 {
+    save_savefile(user_hash_table);
+
     chained_list_iterate(chained_list_threads, &cancel_thread);
     chained_list_iterate(chained_list_sockets_fd, &close_socket);
     chained_list_free(chained_list_threads);
@@ -165,18 +168,11 @@ USER *login_user(int sockfd)
     if (hash_node == NULL)
     {
         logger_info("New user logged: %s\n", username);
-        USER *user = (USER *)malloc(sizeof(USER));
+        USER *user = init_user();
 
         strcpy(user->username, username);
         user->sockets_fd[0] = sockfd;
-        user->followers = NULL;
-        user->notifications = NULL;
-        user->pending_notifications = NULL;
         user->sessions_number = 1;
-        pthread_mutex_init(&user->mutex, NULL);
-
-        for (int i = 1; i < MAX_SESSIONS; i++)
-            user->sockets_fd[i] = -1;
 
         hash_node = hash_insert(user_hash_table, username, (void *)user);
 

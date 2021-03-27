@@ -17,4 +17,6 @@ typedef struct user
   pthread_mutex_t mutex;
 } USER;
 
+USER *init_user(void);
+
 #endif // USER_H_

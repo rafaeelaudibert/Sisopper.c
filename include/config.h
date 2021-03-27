@@ -9,6 +9,7 @@
 
 // Server
 #define CONNECTIONS_TO_ACCEPT 15
+#define SAVEFILE_FILE_PATH ".savefile"
 
 // Client
 #define HANDLE_MIN_SIZE 4
