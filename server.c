@@ -43,6 +43,13 @@ int sockfd = 0;
 
 HASH_TABLE user_hash_table = NULL;
 
+// MUTEXES
+pthread_mutex_t MUTEX_LOGIN = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t MUTEX_FOLLOW = PTHREAD_MUTEX_INITIALIZER;
+
+#define LOCK(mutex) pthread_mutex_lock(&mutex)
+#define UNLOCK(mutex) pthread_mutex_unlock(&mutex)
+
 int main(int argc, char *argv[])
 {
     user_hash_table = hash_init();
@@ -144,7 +151,9 @@ USER *login_user(int sockfd)
         return NULL;
     }
 
-    //TODO BEGIN seção critica
+    // Only one user can be logged in each time
+    LOCK(MUTEX_LOGIN);
+
     HASH_NODE *hash_node = hash_find(user_hash_table, username);
     if (hash_node == NULL)
     {
@@ -178,7 +187,8 @@ USER *login_user(int sockfd)
 
         return user;
     }
-    // TODO: END SEÇÃO CRÍTICA
+
+    UNLOCK(MUTEX_LOGIN);
 
     return NULL;
 }
@@ -193,10 +203,13 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
 {
     if (strcmp(user_to_follow_username, current_user_username) == 0)
     {
-        logger_info("User tried following itself, won't work!");
+        logger_info("User tried following itself, won't work!\n");
 
         // TODO: What to do in this case, just allow it?
     }
+
+    // Only allow one follow to be processed at each given time
+    LOCK(MUTEX_FOLLOW);
 
     HASH_NODE *followed_user_node = hash_find(user_hash_table, user_to_follow_username);
     if (followed_user_node == NULL)
@@ -207,6 +220,9 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
     {
         USER *user = (USER *)followed_user_node->value;
         char *dup_current_user_username = strdup(current_user_username);
+
+        // In a real life, this probably should be a trie or any other tree-like structure
+        // with O(logn) worst case, and not this O(n) solution
         char *list_current_user_username = (char *)chained_list_find(
             user->chained_list_followers,
             dup_current_user_username,
@@ -223,6 +239,8 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
             logger_error("The user '%s' already follows '%s'\n", current_user_username, user_to_follow_username);
         }
     }
+
+    UNLOCK(MUTEX_FOLLOW);
 }
 
 void process_message(PACKET *packet, USER *user)
@@ -231,15 +249,10 @@ void process_message(PACKET *packet, USER *user)
     {
         logger_info("Following user: %s\n", packet->payload);
         follow_user(packet->payload, user->username);
-
-        // TODO: SEÇÃO CRÍTICA DE FOLLOW
-
-        // TODO: END SEÇÃO CRÍTICA DE FOLLOW
     }
     else if (packet->command == SEND)
     {
         logger_info("Sending message: %s\n", packet->payload);
-        //TODO send the message to the followers
     }
 }
 
