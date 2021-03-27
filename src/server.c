@@ -35,8 +35,9 @@ void *handle_eof(void *);
 void cleanup(int);
 USER *login_user(int);
 void process_message(PACKET *, USER *);
+void receive_message(PACKET *, USER *);
+void follow_user(PACKET *, USER *);
 void print_username(void *);
-void follow_user(char *, char *);
 void send_message(NOTIFICATION *, char *);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
@@ -48,6 +49,7 @@ HASH_TABLE user_hash_table = NULL;
 // MUTEXES
 pthread_mutex_t MUTEX_LOGIN = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_FOLLOW = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t MUTEX_PENDING_NOTIFICATIONS = PTHREAD_MUTEX_INITIALIZER;
 
 #define LOCK(mutex) pthread_mutex_lock(&mutex)
 #define UNLOCK(mutex) pthread_mutex_unlock(&mutex)
@@ -167,8 +169,9 @@ USER *login_user(int sockfd)
 
         strcpy(user->username, username);
         user->sockets_fd[0] = sockfd;
-        user->chained_list_followers = NULL;
-        user->chained_list_notifications = NULL;
+        user->followers = NULL;
+        user->notifications = NULL;
+        user->pending_notifications = NULL;
         user->sessions_number = 1;
         pthread_mutex_init(&user->mutex, NULL);
 
@@ -214,9 +217,11 @@ void print_username(void *void_parameter)
     printf("%s", parameter);
 }
 
-void follow_user(char *user_to_follow_username, char *current_user_username)
+void follow_user(PACKET *packet, USER *current_user)
 {
-    if (strcmp(user_to_follow_username, current_user_username) == 0)
+    char *user_to_follow_username = packet->payload;
+
+    if (strcmp(user_to_follow_username, current_user->username) == 0)
     {
         logger_warn("User tried following itself, won't work!\n");
 
@@ -226,7 +231,7 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
             .message = "User tried following itself. This is not allowed.",
             .type = NOTIFICATION_TYPE__INFO};
 
-        send_message(&notification, current_user_username);
+        send_message(&notification, current_user->username);
 
         return;
     }
@@ -246,14 +251,14 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
             .type = NOTIFICATION_TYPE__INFO};
         strcpy(notification.message, error_message);
 
-        send_message(&notification, current_user_username);
+        send_message(&notification, current_user->username);
 
         logger_error(error_message);
     }
     else
     {
         USER *user = (USER *)followed_user_node->value;
-        char *dup_current_user_username = strdup(current_user_username);
+        char *dup_current_user_username = strdup(current_user->username);
 
         // Lock because we are possibly going to play around with follow list
         LOCK(user->mutex);
@@ -261,15 +266,15 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
         // In a real life, this probably should be a trie or any other tree-like structure
         // with O(logn) worst case, and not this O(n) solution
         char *list_current_user_username = (char *)chained_list_find(
-            user->chained_list_followers,
+            user->followers,
             dup_current_user_username,
             (int (*)(void *, void *))strcmp);
 
         if (list_current_user_username == NULL)
         {
-            user->chained_list_followers = chained_list_append_end(user->chained_list_followers, dup_current_user_username);
+            user->followers = chained_list_append_end(user->followers, dup_current_user_username);
             logger_debug("New list of followers: ");
-            chained_list_print(user->chained_list_followers, &print_username);
+            chained_list_print(user->followers, &print_username);
 
             char *info_message = (char *)calloc(150, sizeof(char));
             sprintf(info_message, "The user '%s' was followed!", user_to_follow_username);
@@ -280,12 +285,12 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
                 .type = NOTIFICATION_TYPE__INFO};
             strcpy(notification.message, info_message);
 
-            send_message(&notification, current_user_username);
+            send_message(&notification, current_user->username);
         }
         else
         {
             char *error_message = (char *)calloc(150, sizeof(char));
-            sprintf(error_message, "The user '%s' already follows '%s'", current_user_username, user_to_follow_username);
+            sprintf(error_message, "The user '%s' already follows '%s'", current_user->username, user_to_follow_username);
 
             NOTIFICATION notification = {
                 .id = GLOBAL_NOTIFICATION_ID++,
@@ -293,7 +298,7 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
                 .type = NOTIFICATION_TYPE__INFO};
             strcpy(notification.message, error_message);
 
-            send_message(&notification, current_user_username);
+            send_message(&notification, current_user->username);
 
             logger_error(error_message);
         }
@@ -304,17 +309,42 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
     UNLOCK(MUTEX_FOLLOW);
 }
 
-void process_message(PACKET *packet, USER *user)
+void process_message(PACKET *packet, USER *current_user)
 {
     if (packet->command == FOLLOW)
     {
         logger_info("Following user: %s\n", packet->payload);
-        follow_user(packet->payload, user->username);
+        follow_user(packet, current_user);
     }
     else if (packet->command == SEND)
     {
         logger_info("Received message: %s\n", packet->payload);
+        receive_message(packet, current_user);
     }
+}
+
+void receive_message(PACKET *packet, USER *current_user)
+{
+    NOTIFICATION *notification = (NOTIFICATION *)calloc(1, sizeof(NOTIFICATION));
+    strcpy(notification->author, current_user->username);
+    strcpy(notification->message, packet->payload);
+    notification->id = GLOBAL_NOTIFICATION_ID++;
+    notification->timestamp = packet->timestamp;
+    notification->type = NOTIFICATION_TYPE__MESSAGE;
+
+    LOCK(MUTEX_FOLLOW);
+    CHAINED_LIST *follower = current_user->followers;
+    while (follower)
+    {
+        send_message(notification, (char *)follower->val);
+        follower = follower->next;
+    }
+    UNLOCK(MUTEX_FOLLOW);
+
+    // Lock user to update list of notification
+    LOCK(current_user->mutex);
+    current_user->notifications = chained_list_append_end(current_user->notifications, (void *)notification);
+    UNLOCK(current_user->mutex);
 }
 
 // Sends a NOTIFICATION to a user
@@ -331,17 +361,28 @@ void send_message(NOTIFICATION *notification, char *username)
     USER *user = (USER *)node->value;
     LOCK(user->mutex);
 
-    for (int i = 0; i < MAX_SESSIONS; i++)
+    if (user->sessions_number > 0)
     {
-        int socket_fd = user->sockets_fd[i];
-        if (socket_fd != -1)
+        for (int i = 0; i < MAX_SESSIONS; i++)
         {
-            if (write(socket_fd, notification, sizeof(NOTIFICATION)) < 0)
+            int socket_fd = user->sockets_fd[i];
+            if (socket_fd != -1)
             {
-                logger_error("When sending notification %d to %s through socket %d\n", notification->id, user->username, socket_fd);
+                if (write(socket_fd, notification, sizeof(NOTIFICATION)) < 0)
+                {
+                    logger_error("When sending notification %d to %s through socket %d\n", notification->id, user->username, socket_fd);
+                }
             }
         }
     }
+    else
+    {
+        // Add to the notifications which must be sent to this user later on
+        LOCK(MUTEX_PENDING_NOTIFICATIONS);
+        user->pending_notifications = chained_list_append_end(user->pending_notifications, (void *)notification);
+        UNLOCK(MUTEX_PENDING_NOTIFICATIONS);
+    }
+
     UNLOCK(user->mutex);
 }
 
@@ -364,6 +405,19 @@ void *handle_connection(void *void_sockfd)
         logger_error("User couldn't login! Max connections (%d) reached\n", MAX_SESSIONS);
         return NULL;
     }
+
+    // Do not allow to add any new notification while we haven't sent the others
+    LOCK(MUTEX_PENDING_NOTIFICATIONS);
+    CHAINED_LIST *pending_notification = current_user->pending_notifications;
+    while (pending_notification)
+    {
+        send_message((NOTIFICATION *)pending_notification->val, current_user->username);
+        pending_notification = pending_notification->next;
+    }
+
+    // We have sent them all, so we can clean it
+    current_user->pending_notifications = NULL;
+    UNLOCK(MUTEX_PENDING_NOTIFICATIONS);
 
     while (1)
     {

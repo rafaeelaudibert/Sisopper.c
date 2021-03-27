@@ -10,8 +10,9 @@ typedef struct user
 {
   char username[MAX_USERNAME_LENGTH];
   int sockets_fd[MAX_SESSIONS];
-  CHAINED_LIST *chained_list_followers;
-  CHAINED_LIST *chained_list_notifications;
+  CHAINED_LIST *followers;
+  CHAINED_LIST *notifications;
+  CHAINED_LIST *pending_notifications;
   int sessions_number;
   pthread_mutex_t mutex;
 } USER;
