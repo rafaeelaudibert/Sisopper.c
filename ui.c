@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "ui.h"
 #include "chained_list.h"
@@ -133,10 +134,14 @@ void UI_add_new_message(UI_MESSAGE *ui_message)
 void update_timeline(void *_arg)
 {
     CHAINED_LIST *old_messages_list = NULL;
+    struct timespec sleep_config = {
+        .tv_sec = 0,
+        .tv_nsec = 5000000, // 5ms
+    };
 
     while (1)
     {
-        sleep(1);
+        nanosleep(&sleep_config, &sleep_config);
 
         LOCK_MESSAGES_LIST;
         if (old_messages_list == messages_list)
