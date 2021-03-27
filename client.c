@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        char *error_message = "On opening socket";
+        char *error_message = "Error when opening socket";
         UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
         ui_error_message->timestamp = time(NULL);
         ui_error_message->message = strdup(error_message);
@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
     int this_true = 1;
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &this_true, sizeof(int)) == -1)
     {
-        char *error_message = "On setting the socket configurations";
+        char *error_message = "Error when setting the socket configurations";
         UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
         ui_error_message->timestamp = time(NULL);
         ui_error_message->message = strdup(error_message);
@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
 
     if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        char *error_message = "On connecting";
+        char *error_message = "Error when connecting to server";
         UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
         ui_error_message->timestamp = time(NULL);
         ui_error_message->message = strdup(error_message);
@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
     bytes_read = write(sockfd, (void *)user_handle, sizeof(char) * MAX_USERNAME_LENGTH);
     if (bytes_read < 0)
     {
-        char *error_message = "On sending user handle";
+        char *error_message = "Error when sending user handle";
         UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
         ui_error_message->timestamp = time(NULL);
         ui_error_message->message = strdup(error_message);
@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
     bytes_read = read(sockfd, (void *)&can_login, sizeof(can_login));
     if (bytes_read < 0)
     {
-        char *error_message = "On reading user login status";
+        char *error_message = "Error when reading user login status";
         UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
         ui_error_message->timestamp = time(NULL);
         ui_error_message->message = strdup(error_message);
@@ -190,7 +190,7 @@ int main(int argc, char *argv[])
         command = identify_command(buffer);
         if (command == UNKNOWN)
         {
-            char *info_message = "Message type unknown! Please prepend the message with FOLLOW or SEND!";
+            char *info_message = "This message type is unknown! Please prepend the message with FOLLOW or SEND!";
             UI_MESSAGE *ui_info_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
             ui_info_message->timestamp = time(NULL);
             ui_info_message->message = strdup(info_message);
@@ -213,23 +213,13 @@ int main(int argc, char *argv[])
         bytes_read = write(sockfd, (void *)&packet, sizeof(PACKET));
         if (bytes_read < 0)
         {
-            char *error_message = "On writing to socket";
+            char *error_message = "Error when writing to server";
             UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
             ui_error_message->timestamp = time(NULL);
             ui_error_message->message = strdup(error_message);
             ui_error_message->type = UI_MESSAGE_TYPE__INFO;
             UI_add_new_message(ui_error_message);
         }
-
-        // TODO: REMOVE THIS FAKE MESSAGE
-        char *fake_message = "Lorem ipsum dolor sit amet";
-        char *user_message = "@rafael";
-        UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
-        ui_error_message->timestamp = time(NULL);
-        ui_error_message->message = strdup(fake_message);
-        ui_error_message->type = UI_MESSAGE_TYPE__MESSAGE;
-        ui_error_message->author = strdup(user_message);
-        UI_add_new_message(ui_error_message);
     }
 
     assert(0);
@@ -248,22 +238,45 @@ void *handle_read(void *void_sockfd)
         bytes_read = read(sockfd, (void *)&notification, sizeof(NOTIFICATION));
         if (bytes_read < 0)
         {
-            logger_error("[READ THREAD] On reading from socket\n");
+            char *error_message = "Error when receiving message from the server";
+            UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+            ui_error_message->timestamp = time(NULL);
+            ui_error_message->message = strdup(error_message);
+            ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+            UI_add_new_message(ui_error_message);
         }
         else if (bytes_read == 0)
         {
-            printf("\n"); // Add this empty line to skip the message prompt
-            logger_info("[READ THREAD] Server closed connection\n");
+            char *error_message = "The server closed the connection";
+            UI_MESSAGE *ui_error_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+            ui_error_message->timestamp = time(NULL);
+            ui_error_message->message = strdup(error_message);
+            ui_error_message->type = UI_MESSAGE_TYPE__INFO;
+            UI_add_new_message(ui_error_message);
 
             // Send a SIGINT to the parent
             kill(getpid(), SIGINT);
 
-            // TODO: End the client interface
             return NULL;
         }
         else
         {
-            logger_info("[READ THREAD] Received notification from server: %s\n", notification.message);
+            UI_MESSAGE *ui_message = (UI_MESSAGE *)calloc(1, sizeof(UI_MESSAGE));
+            ui_message->timestamp = notification.timestamp;
+            ui_message->message = strdup(notification.message);
+
+            // Specific for each notification type
+            if (notification.type == NOTIFICATION_TYPE__MESSAGE)
+            {
+                ui_message->author = strdup(notification.author);
+                ui_message->type = UI_MESSAGE_TYPE__MESSAGE;
+            }
+            else if (notification.type == NOTIFICATION_TYPE__ERROR)
+            {
+                ui_message->type = UI_MESSAGE_TYPE__INFO;
+            }
+
+            UI_add_new_message(ui_message);
         }
     };
 

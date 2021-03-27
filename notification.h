@@ -8,8 +8,8 @@
 
 typedef enum
 {
-    MESSAGE,
-    ERROR,
+    NOTIFICATION_TYPE__MESSAGE,
+    NOTIFICATION_TYPE__ERROR,
 } NOTIFICATION_TYPE;
 
 typedef struct __notification
