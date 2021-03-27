@@ -16,6 +16,7 @@
 #include "packet.h"
 #include "user.h"
 #include "hash.h"
+#include "notification.h"
 
 #include "config.h"
 
@@ -32,10 +33,11 @@ void sigint_handler(int);
 void handle_signals(void);
 void *handle_eof(void *);
 void cleanup(int);
-USER *login_user(int sockfd);
-void process_message(PACKET *packet, USER *user);
-void print_username(void *void_parameter);
-void follow_user(char *user_to_follow_username, char *current_user_username);
+USER *login_user(int);
+void process_message(PACKET *, USER *);
+void print_username(void *);
+void follow_user(char *, char *);
+void send_message(NOTIFICATION *, char *);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
@@ -49,6 +51,8 @@ pthread_mutex_t MUTEX_FOLLOW = PTHREAD_MUTEX_INITIALIZER;
 
 #define LOCK(mutex) pthread_mutex_lock(&mutex)
 #define UNLOCK(mutex) pthread_mutex_unlock(&mutex)
+
+unsigned long long GLOBAL_NOTIFICATION_ID = 0;
 
 int main(int argc, char *argv[])
 {
@@ -172,10 +176,15 @@ USER *login_user(int sockfd)
 
         hash_node = hash_insert(user_hash_table, username, (void *)user);
 
+        // Need to unlock here because of early return
+        UNLOCK(MUTEX_LOGIN);
         return user;
     }
 
     USER *user = (USER *)hash_node->value;
+
+    // Do not allow to play around with user while logging a new user
+    LOCK(user->mutex);
     if (user->sessions_number < MAX_SESSIONS)
     {
         int free_socket_spot = get_free_socket_spot(user->sockets_fd);
@@ -185,9 +194,14 @@ USER *login_user(int sockfd)
         user->sockets_fd[free_socket_spot] = sockfd;
         user->sessions_number++;
 
+        // Need to duplicate because of early return
+        UNLOCK(user->mutex);
+        UNLOCK(MUTEX_LOGIN);
+
         return user;
     }
 
+    UNLOCK(user->mutex);
     UNLOCK(MUTEX_LOGIN);
 
     return NULL;
@@ -203,9 +217,17 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
 {
     if (strcmp(user_to_follow_username, current_user_username) == 0)
     {
-        logger_info("User tried following itself, won't work!\n");
+        logger_warn("User tried following itself, won't work!\n");
 
-        // TODO: What to do in this case, just allow it?
+        NOTIFICATION notification = {
+            .id = GLOBAL_NOTIFICATION_ID++,
+            .timestamp = time(NULL),
+            .message = "User tried following itself. This is not allowed.",
+            .type = NOTIFICATION_TYPE__INFO};
+
+        send_message(&notification, current_user_username);
+
+        return;
     }
 
     // Only allow one follow to be processed at each given time
@@ -214,12 +236,26 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
     HASH_NODE *followed_user_node = hash_find(user_hash_table, user_to_follow_username);
     if (followed_user_node == NULL)
     {
-        logger_error("Could not follow the user %s. It doesn't exist\n", user_to_follow_username);
+        char *error_message = (char *)calloc(150, sizeof(char));
+        sprintf(error_message, "Could not follow the user %s. It doesn't exist", user_to_follow_username);
+
+        NOTIFICATION notification = {
+            .id = GLOBAL_NOTIFICATION_ID++,
+            .timestamp = time(NULL),
+            .type = NOTIFICATION_TYPE__INFO};
+        strcpy(notification.message, error_message);
+
+        send_message(&notification, current_user_username);
+
+        logger_error(error_message);
     }
     else
     {
         USER *user = (USER *)followed_user_node->value;
         char *dup_current_user_username = strdup(current_user_username);
+
+        // Lock because we are possibly going to play around with follow list
+        LOCK(user->mutex);
 
         // In a real life, this probably should be a trie or any other tree-like structure
         // with O(logn) worst case, and not this O(n) solution
@@ -233,11 +269,35 @@ void follow_user(char *user_to_follow_username, char *current_user_username)
             user->chained_list_followers = chained_list_append_end(user->chained_list_followers, dup_current_user_username);
             logger_debug("New list of followers: ");
             chained_list_print(user->chained_list_followers, &print_username);
+
+            char *info_message = (char *)calloc(150, sizeof(char));
+            sprintf(info_message, "The user '%s' was followed!", user_to_follow_username);
+
+            NOTIFICATION notification = {
+                .id = GLOBAL_NOTIFICATION_ID++,
+                .timestamp = time(NULL),
+                .type = NOTIFICATION_TYPE__INFO};
+            strcpy(notification.message, info_message);
+
+            send_message(&notification, current_user_username);
         }
         else
         {
-            logger_error("The user '%s' already follows '%s'\n", current_user_username, user_to_follow_username);
+            char *error_message = (char *)calloc(150, sizeof(char));
+            sprintf(error_message, "The user '%s' already follows '%s'", current_user_username, user_to_follow_username);
+
+            NOTIFICATION notification = {
+                .id = GLOBAL_NOTIFICATION_ID++,
+                .timestamp = time(NULL),
+                .type = NOTIFICATION_TYPE__INFO};
+            strcpy(notification.message, error_message);
+
+            send_message(&notification, current_user_username);
+
+            logger_error(error_message);
         }
+
+        UNLOCK(user->mutex);
     }
 
     UNLOCK(MUTEX_FOLLOW);
@@ -254,6 +314,35 @@ void process_message(PACKET *packet, USER *user)
     {
         logger_info("Sending message: %s\n", packet->payload);
     }
+}
+
+// Sends a NOTIFICATION to a user
+void send_message(NOTIFICATION *notification, char *username)
+{
+
+    HASH_NODE *node = hash_find(user_hash_table, username);
+    if (!node)
+    {
+        logger_error("When sending message to non existent username %s\n", username);
+    }
+
+    // Gets the user and lock its mutex
+    USER *user = (USER *)node->value;
+    LOCK(user->mutex);
+
+    for (int i = 0; i < MAX_SESSIONS; i++)
+    {
+        int socket_fd = user->sockets_fd[i];
+        if (socket_fd != -1)
+        {
+            if (write(socket_fd, notification, sizeof(NOTIFICATION)) < 0)
+            {
+                logger_error("When sending notification %d to %s through socket %d\n", notification->id, user->username, socket_fd);
+            }
+        }
+    }
+
+    UNLOCK(user->mutex);
 }
 
 void *handle_connection(void *void_sockfd)

@@ -271,7 +271,7 @@ void *handle_read(void *void_sockfd)
                 ui_message->author = strdup(notification.author);
                 ui_message->type = UI_MESSAGE_TYPE__MESSAGE;
             }
-            else if (notification.type == NOTIFICATION_TYPE__ERROR)
+            else if (notification.type == NOTIFICATION_TYPE__INFO)
             {
                 ui_message->type = UI_MESSAGE_TYPE__INFO;
             }
