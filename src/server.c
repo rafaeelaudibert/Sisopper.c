@@ -330,6 +330,7 @@ void receive_message(PACKET *packet, USER *current_user)
 
     LOCK(MUTEX_FOLLOW);
     CHAINED_LIST *follower = current_user->followers;
+    send_message(notification, current_user->username);
     while (follower)
     {
         send_message(notification, (char *)follower->val);
