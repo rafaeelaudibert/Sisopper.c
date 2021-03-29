@@ -207,7 +207,7 @@ int main(int argc, char *argv[])
             .timestamp = time(NULL),
             .length = strlen(buffer),
         };
-        strncpy(packet.payload, buffer, MAX_MESSAGE_SIZE + 2);
+        strcpy(packet.payload, buffer);
 
         /* write in the socket */
         bytes_read = write(sockfd, (void *)&packet, sizeof(PACKET));

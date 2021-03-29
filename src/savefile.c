@@ -42,7 +42,10 @@ HASH_TABLE read_savefile()
         if (username[0] == '\n')
             break;
 
-        fgets(followers, MAX_FOLLOWERS_SIZE, savefile);
+        if (fgets(followers, MAX_FOLLOWERS_SIZE, savefile) == NULL)
+        {
+            logger_warn("Error reading followers list for %s\n", username);
+        };
 
         // Remove \n
         username[strcspn(username, "\n")] = 0;

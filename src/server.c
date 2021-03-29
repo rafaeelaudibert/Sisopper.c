@@ -238,7 +238,7 @@ void follow_user(PACKET *packet, USER *current_user)
     HASH_NODE *followed_user_node = hash_find(user_hash_table, user_to_follow_username);
     if (followed_user_node == NULL)
     {
-        char *error_message = (char *)calloc(150, sizeof(char));
+        char *error_message = (char *)calloc(220, sizeof(char));
         sprintf(error_message, "Could not follow the user %s. It doesn't exist", user_to_follow_username);
 
         NOTIFICATION notification = {
@@ -272,7 +272,7 @@ void follow_user(PACKET *packet, USER *current_user)
             logger_debug("New list of followers: ");
             chained_list_print(user->followers, &print_username);
 
-            char *info_message = (char *)calloc(150, sizeof(char));
+            char *info_message = (char *)calloc(220, sizeof(char));
             sprintf(info_message, "The user '%s' was followed!", user_to_follow_username);
 
             NOTIFICATION notification = {
@@ -285,7 +285,7 @@ void follow_user(PACKET *packet, USER *current_user)
         }
         else
         {
-            char *error_message = (char *)calloc(150, sizeof(char));
+            char *error_message = (char *)calloc(220, sizeof(char));
             sprintf(error_message, "The user '%s' already follows '%s'", current_user->username, user_to_follow_username);
 
             NOTIFICATION notification = {

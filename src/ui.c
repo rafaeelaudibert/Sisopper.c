@@ -73,7 +73,7 @@ void UI_end(void)
 
 char *UI_get_text(unsigned int max_size)
 {
-    int CHARACTER_SIZE_BUFFER_SIZE = 10;
+    int CHARACTER_SIZE_BUFFER_SIZE = 20;
 
     char *buffer = (char *)calloc(max_size + 1, sizeof(char));
     char *character_size_buffer = (char *)calloc(CHARACTER_SIZE_BUFFER_SIZE, sizeof(char)); // This allows at most 9999 chars, more than that we will have a segflow
