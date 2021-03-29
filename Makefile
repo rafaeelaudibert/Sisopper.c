@@ -1,5 +1,5 @@
 CC=gcc
-FLAGS=-Wall -g -pthread -Iinclude
+FLAGS=-Wall -Wpedantic -g -pthread -Iinclude
 LIBRARIES=-lncurses
 
 BIN_FOLDER=./bin
