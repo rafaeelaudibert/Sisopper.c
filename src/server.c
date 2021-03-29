@@ -35,7 +35,7 @@ void handle_signals(void);
 void *handle_eof(void *);
 void cleanup(int);
 USER *login_user(int);
-void process_message(PACKET *, USER *);
+void process_message(void *);
 void receive_message(PACKET *, USER *);
 void follow_user(PACKET *, USER *);
 void print_username(void *);
@@ -56,6 +56,12 @@ pthread_mutex_t MUTEX_PENDING_NOTIFICATIONS = PTHREAD_MUTEX_INITIALIZER;
 #define UNLOCK(mutex) pthread_mutex_unlock(&mutex)
 
 unsigned long long GLOBAL_NOTIFICATION_ID = 0;
+
+typedef struct
+{
+    PACKET *packet;
+    USER *user;
+} MESSAGE_TO_PROCESS;
 
 int main(int argc, char *argv[])
 {
@@ -305,17 +311,18 @@ void follow_user(PACKET *packet, USER *current_user)
     UNLOCK(MUTEX_FOLLOW);
 }
 
-void process_message(PACKET *packet, USER *current_user)
+void process_message(void *void_message_to_process)
 {
-    if (packet->command == FOLLOW)
+    MESSAGE_TO_PROCESS *message_to_process = (MESSAGE_TO_PROCESS *)void_message_to_process;
+    if (message_to_process->packet->command == FOLLOW)
     {
-        logger_info("Following user: %s\n", packet->payload);
-        follow_user(packet, current_user);
+        logger_info("Following user: %s\n", message_to_process->packet->payload);
+        follow_user(message_to_process->packet, message_to_process->user);
     }
-    else if (packet->command == SEND)
+    else if (message_to_process->packet->command == SEND)
     {
-        logger_info("Received message: %s\n", packet->payload);
-        receive_message(packet, current_user);
+        logger_info("Received message: %s\n", message_to_process->packet->payload);
+        receive_message(message_to_process->packet, message_to_process->user);
     }
 }
 
@@ -452,8 +459,18 @@ void *handle_connection(void *void_sockfd)
         }
         else
         {
-            logger_info("[Socket %d] Here is the message: %s\n", sockfd, packet.payload);
-            process_message(&packet, current_user);
+            pthread_t tid;
+
+            // Create copy to pass to the other thread and not be overriden
+            PACKET *packet_copy = (PACKET *)calloc(1, sizeof(PACKET));
+            memcpy(packet_copy, &packet, sizeof(PACKET));
+            logger_info("[Socket %d] Here is the message: %s\n", sockfd, packet_copy->payload);
+
+            MESSAGE_TO_PROCESS *message_to_process = (MESSAGE_TO_PROCESS *)calloc(1, sizeof(MESSAGE_TO_PROCESS));
+            message_to_process->packet = packet_copy;
+            message_to_process->user = current_user;
+            pthread_create(&tid, NULL, (void *(*)(void *)) & process_message, (void *)message_to_process);
+            logger_info("[Socket %d] Proccessing message %d on brand new thread %ld\n", sockfd, packet_copy->seqn, tid);
         }
     };
 
