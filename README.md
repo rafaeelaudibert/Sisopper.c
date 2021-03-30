@@ -1,6 +1,6 @@
 # Sisopper 🐧
  
-WIP Twitter-like application with a server and several clients communicating through UNIX sockets.
+Twitter-like application with a server and several clients communicating through UNIX sockets.
 
 ## Usage 💬
 
