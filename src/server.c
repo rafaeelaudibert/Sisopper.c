@@ -26,6 +26,7 @@ typedef int boolean;
 #define TRUE 1
 
 static int received_sigint = FALSE;
+static int server_port = DEFAULT_PORT;
 
 void *handle_connection(void *);
 void close_socket(void *);
@@ -87,14 +88,13 @@ int main(int argc, char *argv[])
     }
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(DEFAULT_PORT);
+    serv_addr.sin_port = htons(server_port);
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     bzero(&(serv_addr.sin_zero), 8);
 
-    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    {
-        logger_error("When binding socket\n");
-        cleanup(ERROR_BINDING_SOCKET);
+    while(bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0){
+        server_port++;
+        serv_addr.sin_port = htons(server_port);
     }
 
     if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
         logger_error("When starting to listen");
         cleanup(ERROR_LISTEN);
     }
-    logger_info("Listening on port %d...\n", DEFAULT_PORT);
+    logger_info("Listening on port %d...\n", server_port);
 
     // This loop is responsible for keep accepting new connections from clients
     while (true)
