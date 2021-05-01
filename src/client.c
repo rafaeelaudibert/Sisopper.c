@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
@@ -17,6 +18,8 @@
 #include "packet.h"
 #include "user.h"
 #include "ui.h"
+
+srand((unsigned) time(0));
 
 typedef int boolean;
 #define FALSE 0
