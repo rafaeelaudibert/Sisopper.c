@@ -1,5 +1,5 @@
 CC=gcc
-FLAGS=-Wall -Wpedantic -g -pthread -Iinclude
+FLAGS=-Wall -Wpedantic -g -pthread -Iinclude/client -Iinclude/server -Iinclude/structures -Iinclude/utils
 LIBRARIES=-lncurses
 
 BIN_FOLDER=./bin
@@ -17,36 +17,35 @@ release: all
 server: server.o chained_list.o logger.o hash.o savefile.o user.o
 	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o hash.o savefile.o user.o ${LIBRARIES}
 
-server.o: src/server.c
-	${CC} ${FLAGS} -c src/server.c
+server.o: src/server/server.c
+	${CC} ${FLAGS} -c src/server/server.c
+
+savefile.o: src/server/savefile.c
+	${CC} ${FLAGS} -c src/server/savefile.c
 
 # Client related
 client: client.o logger.o  hash.o ui.o chained_list.o
 	${CC} ${FLAGS} -o ${CLIENT_BIN} client.o logger.o  hash.o ui.o chained_list.o ${LIBRARIES}
 
-client.o: src/client.c
-	${CC} ${FLAGS} -c src/client.c
+client.o: src/client/client.c
+	${CC} ${FLAGS} -c src/client/client.c
 
-ui.o: src/ui.c
-	${CC} ${FLAGS} -c src/ui.c
+ui.o: src/client/ui.c
+	${CC} ${FLAGS} -c src/client/ui.c
 
-# Hash table Data Structure
-hash.o: src/hash.c
-	${CC} ${FLAGS} -c src/hash.c
+# Structures
+hash.o: src/structures/hash.c
+	${CC} ${FLAGS} -c src/structures/hash.c
 
-savefile.o: src/savefile.c
-	${CC} ${FLAGS} -c src/savefile.c
+user.o: src/structures/user.c
+	${CC} ${FLAGS} -c src/structures/user.c
 
-user.o: src/user.c
-	${CC} ${FLAGS} -c src/user.c
-
-# Chained List Data Structure
-chained_list.o: src/chained_list.c
-	${CC} ${FLAGS} -c src/chained_list.c
+chained_list.o: src/structures/chained_list.c
+	${CC} ${FLAGS} -c src/structures/chained_list.c
 
 # Utilities
-logger.o: src/logger.c
-	${CC} ${FLAGS} -c src/logger.c
+logger.o: src/utils/logger.c
+	${CC} ${FLAGS} -c src/utils/logger.c
 
 # Clear
 clear:

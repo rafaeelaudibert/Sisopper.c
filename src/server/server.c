@@ -92,7 +92,8 @@ int main(int argc, char *argv[])
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     bzero(&(serv_addr.sin_zero), 8);
 
-    while(bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0){
+    while (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+    {
         server_port++;
         serv_addr.sin_port = htons(server_port);
     }

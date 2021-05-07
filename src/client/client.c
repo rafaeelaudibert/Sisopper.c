@@ -19,8 +19,6 @@
 #include "user.h"
 #include "ui.h"
 
-srand((unsigned) time(0));
-
 typedef int boolean;
 #define FALSE 0
 #define TRUE 1
@@ -67,6 +65,8 @@ int main(int argc, char *argv[])
         logger_info("Usage: %s <profile> <server address=%s> <port=%d>\n", argv[0], DEFAULT_HOST, DEFAULT_PORT);
         exit(NOT_ENOUGH_ARGUMENTS_ERROR);
     }
+
+    srand((unsigned)time(0));
 
     char *user_handle = argv[1];
     int len_handle = strlen(user_handle);
