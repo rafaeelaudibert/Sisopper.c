@@ -14,11 +14,14 @@ release: FLAGS += -g0 -O2 -D NO_DEBUG
 release: all
 
 # Server related
-server: server.o chained_list.o logger.o hash.o savefile.o user.o
-	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o hash.o savefile.o user.o ${LIBRARIES}
+server: server.o chained_list.o logger.o hash.o savefile.o user.o server_ring.o
+	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o hash.o savefile.o user.o server_ring.o ${LIBRARIES}
 
 server.o: src/server/server.c
 	${CC} ${FLAGS} -c src/server/server.c
+
+server_ring.o: src/server/server_ring.c
+	${CC} ${FLAGS} -c src/server/server_ring.c
 
 savefile.o: src/server/savefile.c
 	${CC} ${FLAGS} -c src/server/savefile.c

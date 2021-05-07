@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <assert.h>
+#include <errno.h>
 
 #include "chained_list.h"
 #include "exit_errors.h"
@@ -18,6 +19,7 @@
 #include "hash.h"
 #include "notification.h"
 #include "savefile.h"
+#include "server_ring.h"
 
 #include "config.h"
 
@@ -25,10 +27,14 @@ typedef int boolean;
 #define FALSE 0
 #define TRUE 1
 
+extern int errno;
+
 static int received_sigint = FALSE;
-static int server_port = DEFAULT_PORT;
 
 void *handle_connection(void *);
+void handle_connection_login(int);
+void handle_connection_leader_question(int);
+void handle_connection_keepalive(int);
 void close_socket(void *);
 void cancel_thread(void *);
 void sigint_handler(int);
@@ -45,6 +51,8 @@ void send_message(NOTIFICATION *, char *);
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
 int sockfd = 0;
+
+SERVER_RING *server_ring = NULL;
 
 HASH_TABLE user_hash_table = NULL;
 
@@ -71,45 +79,17 @@ int main(int argc, char *argv[])
 
     handle_signals();
 
+    server_ring = server_ring_initialize();
+    server_ring_connect(server_ring);
+
     socklen_t clilen = sizeof(struct sockaddr_in);
-    struct sockaddr_in serv_addr, cli_addr;
-
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        logger_error("When opening socket\n");
-        exit(ERROR_OPEN_SOCKET);
-    }
-
-    int true = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
-    {
-        logger_error("When setting the socket configurations\n");
-        exit(ERROR_CONFIGURATION_SOCKET);
-    }
-
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(server_port);
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    bzero(&(serv_addr.sin_zero), 8);
-
-    while (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    {
-        server_port++;
-        serv_addr.sin_port = htons(server_port);
-    }
-
-    if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
-    {
-        logger_error("When starting to listen");
-        cleanup(ERROR_LISTEN);
-    }
-    logger_info("Listening on port %d...\n", server_port);
+    struct sockaddr_in cli_addr;
 
     // This loop is responsible for keep accepting new connections from clients
-    while (true)
+    while (1)
     {
         int *newsockfd = (int *)malloc(sizeof(int));
-        *newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
+        *newsockfd = accept(server_ring->self_sockfd, (struct sockaddr *)&cli_addr, &clilen);
 
         if (*newsockfd == -1)
         {
@@ -395,22 +375,69 @@ void send_message(NOTIFICATION *notification, char *username)
 
 void *handle_connection(void *void_sockfd)
 {
-    PACKET packet;
-    int bytes_read, sockfd = *((int *)void_sockfd);
+    int sockfd = *((int *)void_sockfd);
 
+    NOTIFICATION notification;
+    int bytes_read = read(sockfd, (void *)&notification, sizeof(NOTIFICATION));
+    if (bytes_read < 0)
+    {
+        logger_error("Couldn't read first notification from socket %d\n", sockfd);
+        return NULL;
+    }
+
+    switch (notification.type)
+    {
+    case NOTIFICATION_TYPE__LOGIN:
+        logger_info("[Socket %d] Received connection with LOGIN type\n", sockfd);
+        handle_connection_login(sockfd);
+        break;
+    case NOTIFICATION_TYPE__LEADER_QUESTION:
+        logger_info("[Socket %d] Received connection with LEADER_QUESTION type\n", sockfd);
+        handle_connection_leader_question(sockfd);
+        break;
+    case NOTIFICATION_TYPE__KEEPALIVE:
+        logger_info("[Socket %d] Received connection with KEEP_ALIVE type\n", sockfd);
+        if (!server_ring->is_primary)
+        {
+            logger_warn("[Socket %d] It is not primary, should not receive keep alive\n", sockfd);
+            break;
+        }
+
+        handle_connection_keepalive(sockfd);
+        break;
+    case NOTIFICATION_TYPE__ELECTED:
+        // TODO
+        logger_info("[Socket %d] Received connection with ELECTED type\n", sockfd);
+        break;
+    case NOTIFICATION_TYPE__ELECTION:
+        // TODO
+        logger_info("[Socket %d] Received connection with ELECTION type\n", sockfd);
+        break;
+    default:
+        logger_info("[Socket %d] Unhandable connection with %d type\n", sockfd, notification.type);
+        break;
+    }
+
+    return NULL;
+}
+
+void handle_connection_login(int sockfd)
+{
+
+    PACKET packet;
     USER *current_user = login_user(sockfd);
     boolean can_login = current_user != NULL;
 
-    bytes_read = write(sockfd, &can_login, sizeof(can_login));
+    int bytes_read = write(sockfd, &can_login, sizeof(can_login));
     if (bytes_read < 0)
     {
         logger_error("[Socket %d] When sending login ACK/NACK (%d)\n", sockfd, can_login);
-        return NULL;
+        return;
     }
     if (!can_login)
     {
         logger_error("User couldn't login! Max connections (%d) reached\n", MAX_SESSIONS);
-        return NULL;
+        return;
     }
 
     // Do not allow to add any new notification while we haven't sent the others
@@ -456,7 +483,7 @@ void *handle_connection(void *void_sockfd)
                 }
             UNLOCK(current_user->mutex);
 
-            return NULL;
+            return;
         }
         else
         {
@@ -474,8 +501,44 @@ void *handle_connection(void *void_sockfd)
             logger_info("[Socket %d] Proccessing message %d on brand new thread %ld\n", sockfd, packet_copy->seqn, tid);
         }
     };
+}
 
-    return NULL;
+void handle_connection_leader_question(int sockfd)
+{
+    NOTIFICATION notification = {.type = NOTIFICATION_TYPE__ELECTED, .data = server_ring->primary_port};
+    int bytes_read = write(sockfd, &notification, sizeof(NOTIFICATION));
+    if (bytes_read < 0)
+        logger_error("[Socket %d] When sending primary port (%d) back on request\n", sockfd, server_ring->primary_port);
+}
+
+void handle_connection_keepalive(int sockfd)
+{
+    int bytes_read;
+    NOTIFICATION notification = {.type = NOTIFICATION_TYPE__KEEPALIVE}, read_notification;
+
+    while (1)
+    {
+        sleep(1);
+        bytes_read = send(sockfd, (void *)&notification, sizeof(NOTIFICATION), MSG_NOSIGNAL);
+        if (bytes_read < 0)
+        {
+            if (errno == EPIPE)
+            {
+                logger_info("[Socket %d] When sending keepalive to client. Must be dead. Stopping answering keep alives\n", sockfd);
+                return;
+            }
+
+            logger_error("[Socket %d] When sending keepalive to client. Not an EPIPE. Will retry to send...\n", sockfd);
+            continue;
+        }
+
+        bytes_read = read(sockfd, (void *)&read_notification, sizeof(NOTIFICATION));
+        if (bytes_read < 0)
+        {
+            logger_info("[Socket %d] When receiving keepalive from the client. Must be dead. Stopping answering keep alives\n", sockfd);
+            return;
+        }
+    }
 }
 
 void close_socket(void *void_socket)
@@ -514,6 +577,11 @@ void handle_signals(void)
     sigint_action.sa_handler = sigint_handler;
     sigaction(SIGINT, &sigint_action, NULL);
     sigaction(SIGINT, &sigint_action, NULL); // Activating it twice works, so don't remove this ¯\_(ツ)_/¯
+
+    struct sigaction sigint_ignore;
+    sigint_action.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &sigint_ignore, NULL);
+    sigaction(SIGPIPE, &sigint_ignore, NULL);
 
     // Create a different thread to handle CTRL + D
     pthread_t *thread = (pthread_t *)malloc(sizeof(pthread_t));

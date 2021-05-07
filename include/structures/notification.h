@@ -10,6 +10,11 @@ typedef enum
 {
     NOTIFICATION_TYPE__MESSAGE,
     NOTIFICATION_TYPE__INFO,
+    NOTIFICATION_TYPE__LEADER_QUESTION,
+    NOTIFICATION_TYPE__ELECTION,
+    NOTIFICATION_TYPE__ELECTED,
+    NOTIFICATION_TYPE__LOGIN,
+    NOTIFICATION_TYPE__KEEPALIVE
 } NOTIFICATION_TYPE;
 
 typedef struct __notification
@@ -19,6 +24,7 @@ typedef struct __notification
     NOTIFICATION_TYPE type;               // Tipo da notificação, para saber como mostrar na tela
     char message[MAX_MESSAGE_SIZE + 2];   // Dados da mensagem
     char author[MAX_USERNAME_LENGTH + 2]; // Nome do autor da mensagem
+    int data;                             // Dados inteiros passados quando estamos usando LEADER_QUESTION, ELECTION ou ELECTED
 } NOTIFICATION;
 
 #endif // NOTIFICATION_H
