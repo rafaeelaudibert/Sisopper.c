@@ -535,9 +535,6 @@ void handle_connection_election(NOTIFICATION *notification, int origin_sockfd)
         return;
     }
 
-    // Creating and configuring sockfd for the keepalive
-    int sockfd = socket_create();
-
     NOTIFICATION_TYPE notification_type = 0;
     int next_data = 0;
     LOCK(server_ring->MUTEX_ELECTION);
@@ -575,20 +572,9 @@ void handle_connection_election(NOTIFICATION *notification, int origin_sockfd)
 
     NOTIFICATION new_notification = {.type = notification_type, .data = next_data};
 
-    struct sockaddr_in next_addr;
-
-    next_addr.sin_family = AF_INET;
-    bzero(&(next_addr.sin_zero), 8);
-
-    server_ring->next_index = server_ring->self_index;
-    do
-    {
-        server_ring->next_index = server_ring_get_next_index(server_ring, server_ring->next_index);
-        next_addr.sin_port = htons(server_ring->server_ring_ports[server_ring->next_index]);
-        struct hostent *in_addr = gethostbyname(server_ring->server_ring_addresses[server_ring->next_index]);
-        next_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
-    } while (server_ring->next_index != server_ring->self_index &&
-             (connect(sockfd, (struct sockaddr *)&next_addr, sizeof(next_addr)) < 0));
+    // Creating and configuring sockfd for the keepalive
+    int sockfd = socket_create();
+    server_ring_connect_with_next_server(server_ring, sockfd);
 
     // Went all the list around and couldn't connect to anyone, so I should be the primary anyway
     if (server_ring->next_index == server_ring->self_index)
@@ -654,20 +640,7 @@ void handle_connection_elected(NOTIFICATION *notification)
     UNLOCK(server_ring->MUTEX_ELECTION);
 
     // Sending message to the next in the queue
-    struct sockaddr_in next_addr;
-
-    next_addr.sin_family = AF_INET;
-    bzero(&(next_addr.sin_zero), 8);
-
-    server_ring->next_index = server_ring->self_index;
-    do
-    {
-        server_ring->next_index = server_ring_get_next_index(server_ring, server_ring->next_index);
-        next_addr.sin_port = htons(server_ring->server_ring_ports[server_ring->next_index]);
-        struct hostent *in_addr = gethostbyname(server_ring->server_ring_addresses[server_ring->next_index]);
-        next_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
-    } while (server_ring->next_index != server_ring->self_index &&
-             (connect(sockfd, (struct sockaddr *)&next_addr, sizeof(next_addr)) < 0));
+    server_ring_connect_with_next_server(server_ring, sockfd);
 
     // Went all the list around and couldn't connect to anyone, so I should be the primary anyway
     if (server_ring->next_index == server_ring->self_index)

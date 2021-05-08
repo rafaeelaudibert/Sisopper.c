@@ -119,20 +119,8 @@ void server_ring_listen(SERVER_RING *ring)
 
 void server_ring_connect_with_ring(SERVER_RING *ring)
 {
-    struct sockaddr_in next_addr;
 
-    next_addr.sin_family = AF_INET;
-    bzero(&(next_addr.sin_zero), 8);
-
-    ring->next_index = ring->self_index;
-    do
-    {
-        ring->next_index = server_ring_get_next_index(ring, ring->next_index);
-        next_addr.sin_port = htons(ring->server_ring_ports[ring->next_index]);
-        struct hostent *in_addr = gethostbyname(ring->server_ring_addresses[ring->next_index]);
-        next_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
-    } while (ring->next_index != ring->self_index &&
-             (connect(ring->next_sockfd, (struct sockaddr *)&next_addr, sizeof(next_addr)) < 0));
+    server_ring_connect_with_next_server(ring, ring->next_sockfd);
 
     // Went all the list around and couldn't connect to anyone, so I'm the primary
     if (ring->next_index == ring->self_index)
@@ -268,24 +256,7 @@ void start_election(void *void_ring)
 
         logger_info("Inside election start, preparing it...\n");
 
-        struct sockaddr_in next_addr;
-
-        next_addr.sin_family = AF_INET;
-        bzero(&(next_addr.sin_zero), 8);
-
-        int connection_status;
-        ring->next_index = ring->self_index;
-        do
-        {
-            ring->next_index = server_ring_get_next_index(ring, ring->next_index);
-            next_addr.sin_port = htons(ring->server_ring_ports[ring->next_index]);
-            struct hostent *in_addr = gethostbyname(ring->server_ring_addresses[ring->next_index]);
-            next_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
-            logger_debug("Will try to connect to %d\n", ring->server_ring_ports[ring->next_index]);
-
-            connection_status = connect(sockfd, (struct sockaddr *)&next_addr, sizeof(next_addr));
-            logger_debug("Returned %d\n", connection_status);
-        } while (ring->next_index != ring->self_index && connection_status < 0);
+        server_ring_connect_with_next_server(ring, sockfd);
 
         // Went all the list around and couldn't connect to anyone, so I'm the primary
         if (ring->next_index == ring->self_index)
@@ -322,4 +293,21 @@ void start_election(void *void_ring)
         // If it is already in an election, can just unlock it again
         UNLOCK(ring->MUTEX_ELECTION);
     }
+}
+
+void server_ring_connect_with_next_server(SERVER_RING *ring, int sockfd)
+{
+    struct sockaddr_in next_addr;
+
+    next_addr.sin_family = AF_INET;
+    bzero(&(next_addr.sin_zero), 8);
+
+    ring->next_index = ring->self_index;
+    do
+    {
+        ring->next_index = server_ring_get_next_index(ring, ring->next_index);
+        next_addr.sin_port = htons(ring->server_ring_ports[ring->next_index]);
+        struct hostent *in_addr = gethostbyname(ring->server_ring_addresses[ring->next_index]);
+        next_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
+    } while (ring->next_index != ring->self_index && (connect(sockfd, (struct sockaddr *)&next_addr, sizeof(next_addr)) < 0));
 }

@@ -30,5 +30,6 @@ SERVER_RING *server_ring_initialize(void);
 void server_ring_connect(SERVER_RING *);
 int server_ring_get_next_index(SERVER_RING *, int);
 void server_ring_keep_alive_primary(void *);
+void server_ring_connect_with_next_server(SERVER_RING *, int);
 
 #endif // SERVER_RING_H
