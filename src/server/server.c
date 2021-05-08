@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include <assert.h>
 #include <errno.h>
+#include <netdb.h>
 
 #include "chained_list.h"
 #include "exit_errors.h"
@@ -35,6 +36,8 @@ void *handle_connection(void *);
 void handle_connection_login(int);
 void handle_connection_leader_question(int);
 void handle_connection_keepalive(int);
+void handle_connection_election(NOTIFICATION *, int sockfd);
+void handle_connection_elected(NOTIFICATION *);
 void close_socket(void *);
 void cancel_thread(void *);
 void sigint_handler(int);
@@ -405,13 +408,13 @@ void *handle_connection(void *void_sockfd)
 
         handle_connection_keepalive(sockfd);
         break;
-    case NOTIFICATION_TYPE__ELECTED:
-        // TODO
-        logger_info("[Socket %d] Received connection with ELECTED type\n", sockfd);
-        break;
     case NOTIFICATION_TYPE__ELECTION:
-        // TODO
         logger_info("[Socket %d] Received connection with ELECTION type\n", sockfd);
+        handle_connection_election(&notification, sockfd);
+        break;
+    case NOTIFICATION_TYPE__ELECTED:
+        logger_info("[Socket %d] Received connection with ELECTED type\n", sockfd);
+        handle_connection_elected(&notification);
         break;
     default:
         logger_info("[Socket %d] Unhandable connection with %d type\n", sockfd, notification.type);
@@ -509,6 +512,210 @@ void handle_connection_leader_question(int sockfd)
     int bytes_read = write(sockfd, &notification, sizeof(NOTIFICATION));
     if (bytes_read < 0)
         logger_error("[Socket %d] When sending primary port (%d) back on request\n", sockfd, server_ring->primary_port);
+}
+
+void handle_connection_election(NOTIFICATION *notification, int origin_sockfd)
+{
+    // Cancel my keep alive, because we are in an election
+    pthread_cancel(server_ring->keepalive_tid);
+
+    // Check if someone is late to the party, and inconsistent, thinking that we don't have a leader, but we actually do have
+    if (server_ring->is_primary)
+    {
+        logger_warn("I'm already primary, but someone doesn't know, telling them\n");
+
+        NOTIFICATION notification = {.type = NOTIFICATION_TYPE__ELECTED, .data = server_ring->self_index};
+        int bytes_wrote = write(origin_sockfd, (void *)&notification, sizeof(NOTIFICATION));
+        if (bytes_wrote < 0)
+        {
+            logger_error("Error when trying to send I was elected. Be careful, the node %d may be inoperant.\n");
+        }
+
+        return;
+    }
+
+    // Creating and configuring sockfd for the keepalive
+    int sockfd, true = 1;
+
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    {
+        logger_error("When opening socket\n");
+        exit(ERROR_OPEN_SOCKET);
+    }
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
+    {
+        logger_error("When setting the socket configurations\n");
+        exit(ERROR_CONFIGURATION_SOCKET);
+    }
+
+    NOTIFICATION_TYPE notification_type = 0;
+    int next_data = 0;
+    LOCK(server_ring->MUTEX_ELECTION);
+    if (notification->data < server_ring->self_index && server_ring->in_election) // Already participating with bigger number, just ignore it
+    {
+        logger_info("Already participating in the election, with a bigger number, ignoring it...\n");
+        UNLOCK(server_ring->MUTEX_ELECTION);
+        return;
+    }
+    UNLOCK(server_ring->MUTEX_ELECTION);
+
+    LOCK(server_ring->MUTEX_ELECTION);
+    server_ring->in_election = 1; // Enter in the election
+    UNLOCK(server_ring->MUTEX_ELECTION);
+
+    if (notification->data == server_ring->self_index)
+    {
+        // I am elected!
+        logger_info("I'm the new leader! 👑\n");
+
+        notification_type = NOTIFICATION_TYPE__ELECTED;
+        next_data = server_ring->self_index;
+
+        // Become the primary right now
+        server_ring->is_primary = 1;
+    }
+    else
+    {
+        // Send message to the next one, with either my number if I am more important, or keep passing
+        notification_type = NOTIFICATION_TYPE__ELECTION;
+        next_data = server_ring->self_index > notification->data ? server_ring->self_index : notification->data;
+        logger_info("I'm not the new leader\n");
+        logger_info("Sending ahead, from idx %d that the new leader should be the %d\n", server_ring->self_index, next_data);
+    }
+
+    NOTIFICATION new_notification = {.type = notification_type, .data = next_data};
+
+    struct sockaddr_in next_addr;
+
+    next_addr.sin_family = AF_INET;
+    bzero(&(next_addr.sin_zero), 8);
+
+    server_ring->next_index = server_ring->self_index;
+    do
+    {
+        server_ring->next_index = server_ring_get_next_index(server_ring, server_ring->next_index);
+        next_addr.sin_port = htons(server_ring->server_ring_ports[server_ring->next_index]);
+        struct hostent *in_addr = gethostbyname(server_ring->server_ring_addresses[server_ring->next_index]);
+        next_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
+    } while (server_ring->next_index != server_ring->self_index &&
+             (connect(sockfd, (struct sockaddr *)&next_addr, sizeof(next_addr)) < 0));
+
+    // Went all the list around and couldn't connect to anyone, so I should be the primary anyway
+    if (server_ring->next_index == server_ring->self_index)
+    {
+        logger_info("Couldn't find any other option connection, so I must be the only server\n");
+        logger_info("I'm the new leader! 👑\n");
+        server_ring->is_primary = 1;
+
+        // Uses mutex because we don't know if it counts as a single memory access or two because of the pointer
+        LOCK(server_ring->MUTEX_ELECTION);
+        server_ring->in_election = 0;
+        UNLOCK(server_ring->MUTEX_ELECTION);
+
+        server_ring->primary_port = server_ring->server_ring_ports[server_ring->next_index];
+        return;
+    }
+
+    // Need to ask who is the primary
+    logger_info("Connected with next node in port %d\n", server_ring->server_ring_ports[server_ring->next_index]);
+    logger_info("Will send the subsequent election message\n");
+
+    int bytes_wrote = write(sockfd, (void *)&new_notification, sizeof(NOTIFICATION));
+    if (bytes_wrote < 0)
+    {
+        logger_error("Error when trying to send next election message.\n");
+        exit(ERROR_LOOKING_FOR_LEADER);
+    }
+
+    logger_info("Subsequent election message sent\n");
+
+    close(sockfd);
+}
+
+void handle_connection_elected(NOTIFICATION *notification)
+{
+
+    // Just ignore in case we are electing ourselves, since we are the ones that started this message
+    if (notification->data == server_ring->self_index)
+    {
+        logger_info("Received an ELECTED message, stating that I'm the leader, so everyone agrees now\n");
+        return;
+    }
+
+    LOCK(server_ring->MUTEX_ELECTION);
+    if (!server_ring->in_election)
+    {
+        logger_warn("Received elected message but it is not in an ellection. Will just drop the message...\n");
+        UNLOCK(server_ring->MUTEX_ELECTION);
+        return;
+    }
+    UNLOCK(server_ring->MUTEX_ELECTION);
+
+    // Creating and configuring sockfd for the keepalive
+    int sockfd, true = 1;
+
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    {
+        logger_error("When opening socket\n");
+        exit(ERROR_OPEN_SOCKET);
+    }
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
+    {
+        logger_error("When setting the socket configurations\n");
+        exit(ERROR_CONFIGURATION_SOCKET);
+    }
+
+    logger_info("👑 The new leader is %d!\n", notification->data);
+
+    // Configuring our primary port and election
+    server_ring->primary_port = server_ring->server_ring_ports[notification->data];
+
+    LOCK(server_ring->MUTEX_ELECTION);
+    server_ring->in_election = 0;
+    UNLOCK(server_ring->MUTEX_ELECTION);
+
+    // Sending message to the next in the queue
+    struct sockaddr_in next_addr;
+
+    next_addr.sin_family = AF_INET;
+    bzero(&(next_addr.sin_zero), 8);
+
+    server_ring->next_index = server_ring->self_index;
+    do
+    {
+        server_ring->next_index = server_ring_get_next_index(server_ring, server_ring->next_index);
+        next_addr.sin_port = htons(server_ring->server_ring_ports[server_ring->next_index]);
+        struct hostent *in_addr = gethostbyname(server_ring->server_ring_addresses[server_ring->next_index]);
+        next_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
+    } while (server_ring->next_index != server_ring->self_index &&
+             (connect(sockfd, (struct sockaddr *)&next_addr, sizeof(next_addr)) < 0));
+
+    // Went all the list around and couldn't connect to anyone, so I should be the primary anyway
+    if (server_ring->next_index == server_ring->self_index)
+    {
+        logger_error("Couldn't find any other option connection, so I should be the leader, but I'm not. Going to close for consistency...\n");
+        exit(ERROR_ACCEPTING_CONNECTION);
+    }
+
+    // Need to send the message to the next one, saying who is the primary
+    logger_info("Connected with next node in port %d\n", server_ring->server_ring_ports[server_ring->next_index]);
+    logger_info("Will send the subsequent election message\n");
+
+    int bytes_wrote = send(sockfd, (void *)notification, sizeof(NOTIFICATION), MSG_NOSIGNAL);
+    if (bytes_wrote < 0)
+    {
+        logger_error("Error when trying to send elected message.\n");
+        exit(ERROR_SENDING_ELECTED);
+    }
+
+    logger_info("Sent the ELECTED message stating that %d is the leader\n", notification->data);
+
+    // Restart the keepalive process
+    pthread_create(&server_ring->keepalive_tid, NULL, (void *(*)(void *)) & server_ring_keep_alive_primary, (void *)server_ring);
+
+    close(sockfd);
 }
 
 void handle_connection_keepalive(int sockfd)

@@ -21,9 +21,14 @@ typedef struct server_ring
 
     int keepalive_fd;
     pthread_t keepalive_tid;
+
+    int in_election;
+    pthread_mutex_t MUTEX_ELECTION;
 } SERVER_RING;
 
 SERVER_RING *server_ring_initialize(void);
 void server_ring_connect(SERVER_RING *);
+int server_ring_get_next_index(SERVER_RING *, int);
+void server_ring_keep_alive_primary(void *);
 
 #endif // SERVER_RING_H
