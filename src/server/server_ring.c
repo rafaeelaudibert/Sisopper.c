@@ -3,6 +3,7 @@
 #include "config.h"
 #include "logger.h"
 #include "notification.h"
+#include "socket.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,32 +58,9 @@ SERVER_RING *server_ring_initialize(void)
 
     pthread_mutex_init(&ring->MUTEX_ELECTION, NULL);
 
-    // Creating and configuring sockfd for this node to receive messages
-    if ((ring->self_sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        logger_error("When opening socket\n");
-        exit(ERROR_OPEN_SOCKET);
-    }
-
-    int true = 1;
-    if (setsockopt(ring->self_sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
-    {
-        logger_error("When setting the socket configurations\n");
-        exit(ERROR_CONFIGURATION_SOCKET);
-    }
-
-    // Creating and configuring sockfd for the node in the ring
-    if ((ring->next_sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    {
-        logger_error("When opening next socket\n");
-        exit(ERROR_OPEN_SOCKET);
-    }
-
-    if (setsockopt(ring->next_sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
-    {
-        logger_error("When setting the socket configurations\n");
-        exit(ERROR_CONFIGURATION_SOCKET);
-    }
+    // Creating and configuring sockfd for this node to receive and send messages
+    ring->self_sockfd = socket_create();
+    ring->next_sockfd = socket_create();
 
     return ring;
 }
@@ -197,9 +175,7 @@ void server_ring_connect_with_ring(SERVER_RING *ring)
 int server_ring_get_next_index(SERVER_RING *ring, int current_index)
 {
     if (current_index - 1 >= 0)
-    {
         return current_index - 1;
-    }
 
     // Need to go through the port list to find what is the last index
     int last_index = MAX_RING_SIZE - 1;
@@ -212,33 +188,10 @@ int server_ring_get_next_index(SERVER_RING *ring, int current_index)
 // TODO: As this is a thread, need to kill parent if can't connect with the server for the keep alive
 void server_ring_keep_alive_primary(void *void_ring)
 {
-    int true = 1;
     pthread_t tid;
     SERVER_RING *ring = (SERVER_RING *)void_ring;
 
-    // Creating and configuring sockfd for the keepalive
-    if ((ring->keepalive_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        logger_error("When opening socket\n");
-        exit(ERROR_OPEN_SOCKET);
-    }
-
-    if (setsockopt(ring->keepalive_fd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
-    {
-        logger_error("When setting the socket configurations\n");
-        exit(ERROR_CONFIGURATION_SOCKET);
-    }
-
-    // 2 seconds timeout
-    // TODO: Put in the config file
-    struct timeval tv;
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
-    if (setsockopt(ring->keepalive_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv) == -1)
-    {
-        logger_error("When setting the socket configuration timeout\n");
-        exit(ERROR_CONFIGURATION_SOCKET);
-    }
+    ring->keepalive_fd = socket_create();
 
     // Connecting per se
     struct sockaddr_in keepalive_addr;
@@ -301,20 +254,7 @@ void start_election(void *void_ring)
 {
     SERVER_RING *ring = (SERVER_RING *)void_ring;
 
-    // Creating and configuring sockfd for the keepalive
-    int sockfd, true = 1;
-
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        logger_error("When opening socket\n");
-        exit(ERROR_OPEN_SOCKET);
-    }
-
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
-    {
-        logger_error("When setting the socket configurations\n");
-        exit(ERROR_CONFIGURATION_SOCKET);
-    }
+    int sockfd = socket_create();
 
     logger_info("Election starting...\n");
 

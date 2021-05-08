@@ -21,6 +21,7 @@
 #include "notification.h"
 #include "savefile.h"
 #include "server_ring.h"
+#include "socket.h"
 
 #include "config.h"
 
@@ -535,19 +536,7 @@ void handle_connection_election(NOTIFICATION *notification, int origin_sockfd)
     }
 
     // Creating and configuring sockfd for the keepalive
-    int sockfd, true = 1;
-
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        logger_error("When opening socket\n");
-        exit(ERROR_OPEN_SOCKET);
-    }
-
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
-    {
-        logger_error("When setting the socket configurations\n");
-        exit(ERROR_CONFIGURATION_SOCKET);
-    }
+    int sockfd = socket_create();
 
     NOTIFICATION_TYPE notification_type = 0;
     int next_data = 0;
@@ -653,19 +642,7 @@ void handle_connection_elected(NOTIFICATION *notification)
     UNLOCK(server_ring->MUTEX_ELECTION);
 
     // Creating and configuring sockfd for the keepalive
-    int sockfd, true = 1;
-
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        logger_error("When opening socket\n");
-        exit(ERROR_OPEN_SOCKET);
-    }
-
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)) == -1)
-    {
-        logger_error("When setting the socket configurations\n");
-        exit(ERROR_CONFIGURATION_SOCKET);
-    }
+    int sockfd = socket_create();
 
     logger_info("👑 The new leader is %d!\n", notification->data);
 

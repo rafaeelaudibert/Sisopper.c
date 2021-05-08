@@ -14,8 +14,8 @@ release: FLAGS += -g0 -O2 -D NO_DEBUG
 release: all
 
 # Server related
-server: server.o chained_list.o logger.o hash.o savefile.o user.o server_ring.o
-	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o hash.o savefile.o user.o server_ring.o ${LIBRARIES}
+server: server.o chained_list.o logger.o hash.o savefile.o user.o server_ring.o socket.o
+	${CC} ${FLAGS} -o ${SERVER_BIN} server.o chained_list.o logger.o hash.o savefile.o user.o server_ring.o socket.o ${LIBRARIES}
 
 server.o: src/server/server.c
 	${CC} ${FLAGS} -c src/server/server.c
@@ -45,6 +45,9 @@ user.o: src/structures/user.c
 
 chained_list.o: src/structures/chained_list.c
 	${CC} ${FLAGS} -c src/structures/chained_list.c
+
+socket.o: src/structures/socket.c
+	${CC} ${FLAGS} -c src/structures/socket.c
 
 # Utilities
 logger.o: src/utils/logger.c
