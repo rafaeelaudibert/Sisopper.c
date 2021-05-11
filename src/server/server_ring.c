@@ -282,7 +282,7 @@ void start_election(void *void_ring)
         int bytes_wrote = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
         if (bytes_wrote < 0)
         {
-            logger_error("Error when trying  to send election message.\n");
+            logger_error("Error when trying to send election message.\n");
             exit(ERROR_LOOKING_FOR_LEADER);
         }
 
