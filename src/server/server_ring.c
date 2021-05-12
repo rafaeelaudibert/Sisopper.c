@@ -173,7 +173,6 @@ int server_ring_get_next_index(SERVER_RING *ring, int current_index)
     return last_index;
 }
 
-// TODO: As this is a thread, need to kill parent if can't connect with the server for the keep alive
 void server_ring_keep_alive_primary(void *void_ring)
 {
     pthread_t tid;
@@ -193,7 +192,6 @@ void server_ring_keep_alive_primary(void *void_ring)
 
     if (connect(ring->keepalive_fd, (struct sockaddr *)&keepalive_addr, sizeof(keepalive_addr)) < 0)
     {
-        // TODO: We could actually start an election if this happens right now
         logger_error("When connecting to main server\n");
         exit(ERROR_STARTING_CONNECTION);
     }
