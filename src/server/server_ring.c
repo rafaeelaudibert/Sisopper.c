@@ -48,9 +48,8 @@ SERVER_RING *server_ring_initialize(void)
     memset(ring->server_ring_ports, 0, sizeof(int) * MAX_RING_SIZE);
     memset(ring->server_ring_addresses, 0, sizeof(char *) * MAX_RING_SIZE);
 
-    // TODO: If we have more values here than MAX_RING_SIZE this will break
-    memcpy(ring->server_ring_ports, AVAILABLE_PORTS, sizeof(AVAILABLE_PORTS));
-    memcpy(ring->server_ring_addresses, AVAILABLE_HOSTS, sizeof(AVAILABLE_HOSTS));
+    memcpy(ring->server_ring_ports, AVAILABLE_PORTS, max(sizeof(AVAILABLE_PORTS), sizeof(ring->server_ring_ports)));
+    memcpy(ring->server_ring_addresses, AVAILABLE_HOSTS, max(sizeof(AVAILABLE_HOSTS), sizeof(ring->server_ring_addresses)));
 
     ring->in_election = 0; // Do NOT start in election
     ring->is_primary = 0;  // State that is not primary
