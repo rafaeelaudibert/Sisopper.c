@@ -89,7 +89,7 @@ void server_ring_bind(SERVER_RING *ring)
     do
     {
         // Check that we haven't finished our list of available ports
-        if (ring->server_ring_ports[++ring->self_index] == 0)
+        if (ring->server_ring_ports[++ring->self_index] == 0 || ring->self_index >= MAX_RING_SIZE)
         {
             logger_error("When trying to find an available port to connect");
             exit(ERROR_BINDING_SOCKET);
