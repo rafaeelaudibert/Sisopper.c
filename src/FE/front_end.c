@@ -8,8 +8,9 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <pthread.h>
-#include <semaphore.h>
 #include <assert.h>
+#include <errno.h>
+#include <netdb.h>
 
 #include "chained_list.h"
 #include "exit_errors.h"
@@ -31,7 +32,10 @@
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
 
+static int received_sigint = FALSE;
+
 int serverRM_socket;
+int serverRM_keepalive_socket;
 int client_connections_socket;
 int serverRM_online = FALSE;
 
@@ -41,22 +45,34 @@ HASH_TABLE user_hash_table = NULL;
 
 NOTIFICATION *processing_message;
 
-// Semaphores
-sem_t online_semaphore;
-sem_t users_map_semaphore;
-sem_t sockets_map_semaphore;
+// Mutexes
+pthread_mutex_t MUTEX_RECONNECT = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t MUTEX_ONLINE_SERVER = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t MUTEX_CONSUMER = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t MUTEX_MESSAGE_QUEUE = PTHREAD_MUTEX_INITIALIZER;
 
+void sigint_handler(int);
 void handle_signals(void);
-void configure_connection(int *, sockaddr_in *);
-void handle_server_connection(sockaddr_in *);
+void configure_connection(int *, struct sockaddr_in *);
+void *monitor_connection_keep_alive(void *);
+int handle_server_connection(struct sockaddr_in *);
 void *listen_server_connection(void *);
+void *listen_server_reconnect(void);
+void *listen_message_processor(void);
+void *listen_client_connection(void *);
+void process_client_message(NOTIFICATION *);
+void send_server(NOTIFICATION *);
+int send_notification(NOTIFICATION *, int);
+void cleanup(int);
+
+
 
 int main(int argc, char *argv[])
 {
     int i = 0;
 
     // Ports
-    int portServerRM
+    int portServerRM;
 
     // Sockets Address Config
     socklen_t socklen = sizeof(struct sockaddr_in);
@@ -71,13 +87,11 @@ int main(int argc, char *argv[])
 
     handle_signals();
 
+    // TODO Pegar portServer do Ring
     if(argc == 2)
-    {
-        portServerRM = argv[1]
-    } else
-    {
-        logger_error("Must inform a portServer");   
-    }
+        portServerRM = argv[1];
+    else
+        logger_error("Must inform a portServer");
 
     // Server address config
     serv_addr.sin_family = AF_INET;
@@ -86,9 +100,10 @@ int main(int argc, char *argv[])
     bzero(&(serv_addr.sin_zero), 8);
 
     configure_connection(&serverRM_socket, &serv_addr);
+    configure_connection(&serverRM_keepalive_socket, &serv_addr);
 
     // Block reconnection attempt
-    LOCK(reconnect_mutex);
+    LOCK(MUTEX_RECONNECT);
 
     handle_server_connection(&serv_addr);
 
@@ -129,6 +144,20 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+void sigint_handler(int _sigint)
+{
+    if (!received_sigint)
+    {
+        logger_warn("SIGINT received, closing descriptors and finishing...\n");
+        cleanup(0);
+        received_sigint = TRUE;
+    }
+    else
+    {
+        logger_error("Already received SIGINT... Waiting to finish cleaning up...\n");
+    }
+}
+
 void handle_signals()
 {
     struct sigaction sigint_action;
@@ -137,7 +166,7 @@ void handle_signals()
     sigaction(SIGINT, &sigint_action, NULL); // Activating it twice works, so don't remove this ¯\_(ツ)_/¯
 }
 
-void configure_connection(int *sockfd, sockaddr_in *serv_addr)
+void configure_connection(int *sockfd, struct sockaddr_in *serv_addr)
 {
     if ((*sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
@@ -163,34 +192,48 @@ void configure_connection(int *sockfd, sockaddr_in *serv_addr)
         logger_error("When starting to listen");
         cleanup(ERROR_LISTEN);
     }
-    logger_info("Listening on port %d...\n", server_port);
+    logger_info("Listening on port %d...\n", serv_addr->sin_port );
 }
 
-int handle_server_connection(sockaddr_in *serv_addr)
+void *monitor_connection_keep_alive(void *sockfd)
 {
+
+}
+
+int handle_server_connection(struct sockaddr_in *serv_addr)
+{
+    socklen_t socklen = sizeof(struct sockaddr_in);
+
     if (connect(serverRM_socket, (struct sockaddr *)serv_addr, &socklen) < 0)
     {
         logger_error("When accepting connection\n");
-        UNLOCK(reconnect_mutex);
+        UNLOCK(MUTEX_RECONNECT);
         return -1;
     }
+
+    // if (connect(serverRM_keepalive_socket, (struct sockaddr *)serv_addr, &socklen) < 0)
+    // {
+    //     logger_error("When accepting connection\n");
+    //     UNLOCK(MUTEX_RECONNECT);
+    //     return -1;
+    // }
 
     pthread_t *listen_connection_tid;
     pthread_t *keepalive_server_tid;
 
     // Thread to communicate with server
-    pthread_create(listen_connection_tid, NULL, (void *(*)(void *)) &listen_server_connection, (void *)newsockfd);
-    logger_debug("Created new thread %ld to handle this connection\n", *listenConnection_tid);
+    pthread_create(listen_connection_tid, NULL, (void *(*)(void *)) &listen_server_connection, (void *)serverRM_socket);
+    logger_debug("Created new thread %ld to handle this connection\n", *listen_connection_tid);
     // TODO add to thread list
 
     // Thread to monitor keep alive signal
-    pthread_create(keepalive_server_tid, NULL, (void *(*)(void *)) &monitor_connection_keep_alive, (void *)newsockfd);
+    pthread_create(keepalive_server_tid, NULL, (void *(*)(void *)) &monitor_connection_keep_alive, (void *)serverRM_keepalive_socket);
     logger_debug("Created new thread %ld to handle the monitor keep alive\n", *keepalive_server_tid);
     // TODO add to thread list
 
-    LOCK(serverRM_online_mutex);
+    LOCK(MUTEX_ONLINE_SERVER);
     serverRM_online = TRUE;
-    UNLOCK(serverRM_online_mutex);
+    UNLOCK(MUTEX_ONLINE_SERVER);
 
     return 0;
 }
@@ -248,9 +291,9 @@ void *listen_server_connection(void *sockfd)
 
 void *listen_server_reconnect()
 {
-    while (true)
+    while (TRUE)
     {
-        LOCK(reconnect_mutex);
+        LOCK(MUTEX_RECONNECT);
         logger_info("Waiting for server reconnect...");
         handleServerConnection();
     }
@@ -260,12 +303,12 @@ void *listen_server_reconnect()
 
 void *listen_message_processor()
 {
-    while(true)
+    while(TRUE)
     {
-        LOCK(message_consumer_mutex);
+        LOCK(MUTEX_CONSUMER);
         logger_info("Received message from client. Processing it..");
         send_server(processing_message);
-        UNLOCK(message_queue_mutex);
+        UNLOCK(MUTEX_MESSAGE_QUEUE);
     }
 }
 
@@ -276,6 +319,7 @@ void *listen_client_connection(void *sockfd)
     NOTIFICATION notification;
     int known_user_ID = FALSE;
     int is_client_connected = TRUE;
+    int bytes_read;
 
     while(is_client_connected)
     {
@@ -300,7 +344,7 @@ void *listen_client_connection(void *sockfd)
         {
         case NOTIFICATION_TYPE__LOGIN:
             logger_info("Received login attempt from client: %s\n", notification.author);
-            strcpy(username, notification.author)
+            strcpy(username, notification.author);
             known_user_ID = TRUE;
             process_client_message(&notification);
             break;
@@ -333,9 +377,9 @@ void process_client_message(NOTIFICATION *notification)
     logger_info("Processing notification from client...\n");
     logger_info("Message from: %s\n", notification->author);
 
-    LOCK(message_queue_mutex);
-    processing_message = message;
-    UNLOCK(message_consumer_mutex);
+    LOCK(MUTEX_MESSAGE_QUEUE);
+    processing_message = notification;
+    UNLOCK(MUTEX_CONSUMER);
 }
 
 void send_server(NOTIFICATION *notification)
@@ -350,11 +394,11 @@ void send_server(NOTIFICATION *notification)
         if (status < 0)
         {
             logger_error("Failed to send notification. Server is off...\n");
-            failed = TRUE;
+            hasFailed = TRUE;
             sleep(1);
         }
     }
-    while (status < 0)
+    while (status < 0);
 
     if (hasFailed)
     {
@@ -364,7 +408,7 @@ void send_server(NOTIFICATION *notification)
 
 int send_notification(NOTIFICATION *notification, int sockfd)
 {
-    int bytes_read = write(socketfd, notification, sizeof(NOTIFICATION));
+    int bytes_read = write(sockfd, notification, sizeof(NOTIFICATION));
     if (bytes_read < 0)
     {
         logger_error("Failed to write to socket: %s\n", sockfd);

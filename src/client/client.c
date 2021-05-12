@@ -217,8 +217,7 @@ int main(int argc, char *argv[])
             .id = ++MESSAGE_GLOBAL_ID,
             .timestamp = time(NULL),
             .type = NOTIFICATION_TYPE__MESSAGE,
-            .receiver = NULL,
-            .message = NULL
+            .receiver = NULL
         };
         strcpy(notification.author, user_handle);
         strcpy(notification.message, buffer);

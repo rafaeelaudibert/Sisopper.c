@@ -34,7 +34,7 @@ extern int errno;
 static int received_sigint = FALSE;
 
 void *handle_connection(void *);
-void handle_connection_login(int);
+void handle_connection_login(int, NOTIFICATION *);
 void handle_connection_leader_question(int);
 void handle_connection_keepalive(int);
 void handle_connection_election(NOTIFICATION *, int sockfd);
@@ -45,7 +45,7 @@ void sigint_handler(int);
 void handle_signals(void);
 void *handle_eof(void *);
 void cleanup(int);
-USER *login_user(int);
+USER *login_user(int, char *);
 void process_message(void *);
 void receive_message(PACKET *, USER *);
 void follow_user(PACKET *, USER *);
