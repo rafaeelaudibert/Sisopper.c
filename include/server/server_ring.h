@@ -17,7 +17,7 @@ typedef struct server_ring
     int self_sockfd;
 
     int is_primary;
-    int primary_port;
+    int primary_idx;
 
     int keepalive_fd;
     pthread_t keepalive_tid;
