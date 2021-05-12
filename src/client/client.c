@@ -142,7 +142,16 @@ int main(int argc, char *argv[])
         cleanup(ERROR_STARTING_CONNECTION);
     }
 
-    bytes_read = write(sockfd, (void *)user_handle, sizeof(char) * MAX_USERNAME_LENGTH);
+    NOTIFICATION notification = {
+        .id = ++MESSAGE_GLOBAL_ID,
+        .timestamp = time(NULL),
+        .type = NOTIFICATION_TYPE__LOGIN,
+        .receiver = NULL,
+        .message = NULL
+    };
+    strcpy(notification.author, user_handle);
+
+    bytes_read = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
     if (bytes_read < 0)
     {
         char *error_message = "Error when sending user handle";
@@ -204,16 +213,18 @@ int main(int argc, char *argv[])
 
         strcpy(buffer, remove_command_from_message(command, buffer));
 
-        PACKET packet = {
-            .command = command,
-            .seqn = ++MESSAGE_GLOBAL_ID,
+        NOTIFICATION notification = {
+            .id = ++MESSAGE_GLOBAL_ID,
             .timestamp = time(NULL),
-            .length = strlen(buffer),
+            .type = NOTIFICATION_TYPE__MESSAGE,
+            .receiver = NULL,
+            .message = NULL
         };
-        strcpy(packet.payload, buffer);
+        strcpy(notification.author, user_handle);
+        strcpy(notification.message, buffer);
 
         /* write in the socket */
-        bytes_read = write(sockfd, (void *)&packet, sizeof(PACKET));
+        bytes_read = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
         if (bytes_read < 0)
         {
             char *error_message = "Error when writing to server";

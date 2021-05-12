@@ -50,7 +50,7 @@ void process_message(void *);
 void receive_message(PACKET *, USER *);
 void follow_user(PACKET *, USER *);
 void print_username(void *);
-void send_message(NOTIFICATION *, char *);
+void send_message(NOTIFICATION *);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
@@ -141,16 +141,16 @@ int get_free_socket_spot(int *sockets_fd)
     return -1;
 }
 
-USER *login_user(int sockfd)
+USER *login_user(int sockfd, char *username)
 {
-    char username[MAX_USERNAME_LENGTH];
+    // char username[MAX_USERNAME_LENGTH];
 
-    int bytes_read = read(sockfd, (void *)username, sizeof(char) * MAX_USERNAME_LENGTH);
-    if (bytes_read < 0)
-    {
-        logger_error("Couldn't read username for socket %d\n", sockfd);
-        return NULL;
-    }
+    // int bytes_read = read(sockfd, (void *)username, sizeof(char) * MAX_USERNAME_LENGTH);
+    // if (bytes_read < 0)
+    // {
+    //     logger_error("Couldn't read username for socket %d\n", sockfd);
+    //     return NULL;
+    // }
 
     // Only one user can be logged in each time
     LOCK(MUTEX_LOGIN);
@@ -216,9 +216,10 @@ void follow_user(PACKET *packet, USER *current_user)
             .id = GLOBAL_NOTIFICATION_ID++,
             .timestamp = time(NULL),
             .message = "User tried following itself. This is not allowed.",
-            .type = NOTIFICATION_TYPE__INFO};
+            .type = NOTIFICATION_TYPE__INFO,
+            .receiver = current_user->username};
 
-        send_message(&notification, current_user->username);
+        send_message(&notification);
 
         return;
     }
@@ -235,10 +236,11 @@ void follow_user(PACKET *packet, USER *current_user)
         NOTIFICATION notification = {
             .id = GLOBAL_NOTIFICATION_ID++,
             .timestamp = time(NULL),
-            .type = NOTIFICATION_TYPE__INFO};
+            .type = NOTIFICATION_TYPE__INFO,
+            .receiver = current_user->username};
         strcpy(notification.message, error_message);
 
-        send_message(&notification, current_user->username);
+        send_message(&notification);
 
         logger_error(error_message);
     }
@@ -269,10 +271,11 @@ void follow_user(PACKET *packet, USER *current_user)
             NOTIFICATION notification = {
                 .id = GLOBAL_NOTIFICATION_ID++,
                 .timestamp = time(NULL),
-                .type = NOTIFICATION_TYPE__INFO};
+                .type = NOTIFICATION_TYPE__INFO,
+                .receiver = current_user->username};
             strcpy(notification.message, info_message);
 
-            send_message(&notification, current_user->username);
+            send_message(&notification);
         }
         else
         {
@@ -282,10 +285,11 @@ void follow_user(PACKET *packet, USER *current_user)
             NOTIFICATION notification = {
                 .id = GLOBAL_NOTIFICATION_ID++,
                 .timestamp = time(NULL),
-                .type = NOTIFICATION_TYPE__INFO};
+                .type = NOTIFICATION_TYPE__INFO,
+                .receiver = current_user->username};
             strcpy(notification.message, error_message);
 
-            send_message(&notification, current_user->username);
+            send_message(&notification);
 
             logger_error(error_message);
         }
@@ -315,6 +319,7 @@ void receive_message(PACKET *packet, USER *current_user)
 {
     NOTIFICATION *notification = (NOTIFICATION *)calloc(1, sizeof(NOTIFICATION));
     strcpy(notification->author, current_user->username);
+    strcpy(notification->receiver, current_user->username);
     strcpy(notification->message, packet->payload);
     notification->id = GLOBAL_NOTIFICATION_ID++;
     notification->timestamp = packet->timestamp;
@@ -322,10 +327,11 @@ void receive_message(PACKET *packet, USER *current_user)
 
     LOCK(MUTEX_FOLLOW);
     CHAINED_LIST *follower = current_user->followers;
-    send_message(notification, current_user->username);
+    send_message(notification);
     while (follower)
     {
-        send_message(notification, (char *)follower->val);
+        strcpy(notification->receiver, (char *)follower->val);
+        send_message(notification);
         follower = follower->next;
     }
     UNLOCK(MUTEX_FOLLOW);
@@ -337,13 +343,13 @@ void receive_message(PACKET *packet, USER *current_user)
 }
 
 // Sends a NOTIFICATION to a user
-void send_message(NOTIFICATION *notification, char *username)
+void send_message(NOTIFICATION *notification)
 {
 
-    HASH_NODE *node = hash_find(user_hash_table, username);
+    HASH_NODE *node = hash_find(user_hash_table, notification->receiver);
     if (!node)
     {
-        logger_error("When sending message to non existent username %s\n", username);
+        logger_error("When sending message to non existent username %s\n", notification->receiver);
         return;
     }
 
@@ -361,7 +367,7 @@ void send_message(NOTIFICATION *notification, char *username)
                 if (write(socket_fd, notification, sizeof(NOTIFICATION)) < 0)
                     logger_error("When sending notification %d to %s through socket %d\n", notification->id, user->username, socket_fd);
                 else
-                    logger_info("Sent notification %d with message '%s' to %s on socket %d\n", notification->id, notification->message, username, socket_fd);
+                    logger_info("Sent notification %d with message '%s' to %s on socket %d\n", notification->id, notification->message, notification->receiver, socket_fd);
             }
         }
     }
@@ -393,7 +399,7 @@ void *handle_connection(void *void_sockfd)
     {
     case NOTIFICATION_TYPE__LOGIN:
         logger_info("[Socket %d] Received connection with LOGIN type\n", sockfd);
-        handle_connection_login(sockfd);
+        handle_connection_login(sockfd, &notification);
         break;
     case NOTIFICATION_TYPE__LEADER_QUESTION:
         logger_info("[Socket %d] Received connection with LEADER_QUESTION type\n", sockfd);
@@ -425,11 +431,11 @@ void *handle_connection(void *void_sockfd)
     return NULL;
 }
 
-void handle_connection_login(int sockfd)
+void handle_connection_login(int sockfd, NOTIFICATION *notification)
 {
 
     PACKET packet;
-    USER *current_user = login_user(sockfd);
+    USER *current_user = login_user(sockfd, notification->author);
     boolean can_login = current_user != NULL;
 
     int bytes_read = write(sockfd, &can_login, sizeof(can_login));
@@ -452,7 +458,7 @@ void handle_connection_login(int sockfd)
         NOTIFICATION *notification = (NOTIFICATION *)pending_notification->val;
 
         logger_info("[Socket %d] Sending pending notification from %d to %d\n", sockfd, notification->author, current_user->username);
-        send_message(notification, current_user->username);
+        send_message(notification);
 
         pending_notification = pending_notification->next;
     }

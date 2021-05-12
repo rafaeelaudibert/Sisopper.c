@@ -19,12 +19,13 @@ typedef enum
 
 typedef struct __notification
 {
-    uint32_t id;                          // Identificador da notificação (sugere-se um identificador único)
-    time_t timestamp;                     // Timestamp da notificação
-    NOTIFICATION_TYPE type;               // Tipo da notificação, para saber como mostrar na tela
-    char message[MAX_MESSAGE_SIZE + 2];   // Dados da mensagem
-    char author[MAX_USERNAME_LENGTH + 2]; // Nome do autor da mensagem
-    int data;                             // Dados inteiros passados quando estamos usando LEADER_QUESTION, ELECTION ou ELECTED
+    uint32_t id;                            // Identificador da notificação (sugere-se um identificador único)
+    time_t timestamp;                       // Timestamp da notificação
+    NOTIFICATION_TYPE type;                 // Tipo da notificação, para saber como mostrar na tela
+    char message[MAX_MESSAGE_SIZE + 2];     // Dados da mensagem
+    char author[MAX_USERNAME_LENGTH + 2];   // Nome do autor da mensagem
+    int data;                               // Dados inteiros passados quando estamos usando LEADER_QUESTION, ELECTION ou ELECTED
+    char receiver[MAX_USERNAME_LENGTH + 2]; // Nome do usuario que vai receber a notificação
 } NOTIFICATION;
 
 #endif // NOTIFICATION_H
