@@ -48,9 +48,8 @@ SERVER_RING *server_ring_initialize(void)
     memset(ring->server_ring_ports, 0, sizeof(int) * MAX_RING_SIZE);
     memset(ring->server_ring_addresses, 0, sizeof(char *) * MAX_RING_SIZE);
 
-    // TODO: If we have more values here than MAX_RING_SIZE this will break
-    memcpy(ring->server_ring_ports, AVAILABLE_PORTS, sizeof(AVAILABLE_PORTS));
-    memcpy(ring->server_ring_addresses, AVAILABLE_HOSTS, sizeof(AVAILABLE_HOSTS));
+    memcpy(ring->server_ring_ports, AVAILABLE_PORTS, max(sizeof(AVAILABLE_PORTS), sizeof(ring->server_ring_ports)));
+    memcpy(ring->server_ring_addresses, AVAILABLE_HOSTS, max(sizeof(AVAILABLE_HOSTS), sizeof(ring->server_ring_addresses)));
 
     ring->in_election = 0; // Do NOT start in election
     ring->is_primary = 0;  // State that is not primary
@@ -90,7 +89,7 @@ void server_ring_bind(SERVER_RING *ring)
     do
     {
         // Check that we haven't finished our list of available ports
-        if (ring->server_ring_ports[++ring->self_index] == 0)
+        if (ring->server_ring_ports[++ring->self_index] == 0 || ring->self_index >= MAX_RING_SIZE)
         {
             logger_error("When trying to find an available port to connect");
             exit(ERROR_BINDING_SOCKET);
@@ -104,7 +103,6 @@ void server_ring_bind(SERVER_RING *ring)
 
 void server_ring_listen(SERVER_RING *ring)
 {
-
     if (listen(ring->self_sockfd, CONNECTIONS_TO_ACCEPT) < 0)
     {
         logger_error("When starting to listen");
@@ -119,7 +117,6 @@ void server_ring_listen(SERVER_RING *ring)
 
 void server_ring_connect_with_ring(SERVER_RING *ring)
 {
-
     server_ring_connect_with_next_server(ring, ring->next_sockfd);
 
     // Went all the list around and couldn't connect to anyone, so I'm the primary
@@ -128,7 +125,8 @@ void server_ring_connect_with_ring(SERVER_RING *ring)
         logger_info("Couldn't find any other option connection, so I must be the only server\n");
         logger_info("I'm the new leader! 👑\n");
         ring->is_primary = 1;
-        ring->primary_port = ring->server_ring_ports[ring->next_index];
+        ring->primary_idx = ring->self_index;
+
         return;
     }
 
@@ -156,8 +154,10 @@ void server_ring_connect_with_ring(SERVER_RING *ring)
         exit(ERROR_LOOKING_FOR_LEADER);
     }
 
-    ring->primary_port = notification.data;
-    logger_info("Found the primary port: %d\n", ring->primary_port);
+    ring->primary_idx = notification.data;
+    logger_info("Found the primary index: %d\n", ring->primary_idx);
+
+    close(ring->next_sockfd);
 }
 
 int server_ring_get_next_index(SERVER_RING *ring, int current_index)
@@ -173,7 +173,6 @@ int server_ring_get_next_index(SERVER_RING *ring, int current_index)
     return last_index;
 }
 
-// TODO: As this is a thread, need to kill parent if can't connect with the server for the keep alive
 void server_ring_keep_alive_primary(void *void_ring)
 {
     pthread_t tid;
@@ -187,20 +186,19 @@ void server_ring_keep_alive_primary(void *void_ring)
     keepalive_addr.sin_family = AF_INET;
     bzero(&(keepalive_addr.sin_zero), 8);
 
-    keepalive_addr.sin_port = htons(ring->primary_port);
-    struct hostent *in_addr = gethostbyname("127.0.0.1"); // TODO: Change something so that we know how to connect to it. Probably we should make the server send their ID and not their port
+    keepalive_addr.sin_port = htons(ring->server_ring_ports[ring->primary_idx]);
+    struct hostent *in_addr = gethostbyname(ring->server_ring_addresses[ring->primary_idx]);
     keepalive_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
 
     if (connect(ring->keepalive_fd, (struct sockaddr *)&keepalive_addr, sizeof(keepalive_addr)) < 0)
     {
-        // TODO: We could actually start an election if this happens right now
         logger_error("When connecting to main server\n");
         exit(ERROR_STARTING_CONNECTION);
     }
 
     while (1)
     {
-        logger_debug("Sending a keep alive to %d\n", ring->primary_port);
+        logger_debug("Sending a keep alive to %d\n", ring->primary_idx);
 
         NOTIFICATION notification = {.type = NOTIFICATION_TYPE__KEEPALIVE}, read_notification;
         int bytes_wrote = send(ring->keepalive_fd, (void *)&notification, sizeof(NOTIFICATION), MSG_NOSIGNAL);
@@ -270,7 +268,7 @@ void start_election(void *void_ring)
             ring->in_election = 0;
             UNLOCK(ring->MUTEX_ELECTION);
 
-            ring->primary_port = ring->server_ring_ports[ring->next_index];
+            ring->primary_idx = ring->self_index;
             return;
         }
 
