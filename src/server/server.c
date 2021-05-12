@@ -509,10 +509,10 @@ void handle_connection_login(int sockfd)
 
 void handle_connection_leader_question(int sockfd)
 {
-    NOTIFICATION notification = {.type = NOTIFICATION_TYPE__ELECTED, .data = server_ring->primary_port};
+    NOTIFICATION notification = {.type = NOTIFICATION_TYPE__ELECTED, .data = server_ring->primary_idx};
     int bytes_read = write(sockfd, &notification, sizeof(NOTIFICATION));
     if (bytes_read < 0)
-        logger_error("[Socket %d] When sending primary port (%d) back on request\n", sockfd, server_ring->primary_port);
+        logger_error("[Socket %d] When sending primary idx (%d) back on request\n", sockfd, server_ring->primary_idx);
 }
 
 void handle_connection_election(NOTIFICATION *notification, int origin_sockfd)
@@ -588,7 +588,7 @@ void handle_connection_election(NOTIFICATION *notification, int origin_sockfd)
         server_ring->in_election = 0;
         UNLOCK(server_ring->MUTEX_ELECTION);
 
-        server_ring->primary_port = server_ring->server_ring_ports[server_ring->next_index];
+        server_ring->primary_idx = server_ring->self_index;
         return;
     }
 
@@ -633,7 +633,7 @@ void handle_connection_elected(NOTIFICATION *notification)
     logger_info("👑 The new leader is %d!\n", notification->data);
 
     // Configuring our primary port and election
-    server_ring->primary_port = server_ring->server_ring_ports[notification->data];
+    server_ring->primary_idx = notification->data;
 
     LOCK(server_ring->MUTEX_ELECTION);
     server_ring->in_election = 0;
