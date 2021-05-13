@@ -58,11 +58,10 @@ pthread_mutex_t MUTEX_APPEND_LIST = PTHREAD_MUTEX_INITIALIZER;
 
 void sigint_handler(int);
 void handle_signals(void);
-void *monitor_connection_keep_alive(void *);
 int handle_server_connection(struct sockaddr_in *);
 void *listen_server_connection(void *);
-void *keep_server_connection(void);
-void *listen_message_processor(void);
+void *keep_server_connection(void *);
+void *listen_message_processor(void *);
 void *listen_client_connection(void *);
 void process_client_message(NOTIFICATION *);
 void send_server(NOTIFICATION *);
@@ -173,10 +172,6 @@ void handle_signals()
     sigint_action.sa_handler = sigint_handler;
     sigaction(SIGINT, &sigint_action, NULL);
     sigaction(SIGINT, &sigint_action, NULL); // Activating it twice works, so don't remove this ¯\_(ツ)_/¯
-}
-
-void *monitor_connection_keep_alive(void *sockfd)
-{
 }
 
 int handle_server_connection(struct sockaddr_in *serv_addr)
@@ -390,7 +385,7 @@ void *keep_server_connection(void *_)
     assert(0);
 }
 
-void *listen_message_processor()
+void *listen_message_processor(void *_)
 {
     while (TRUE)
     {
@@ -441,10 +436,6 @@ void *listen_client_connection(void *sockfd)
         case NOTIFICATION_TYPE__MESSAGE:
             logger_info("Received message from client: %s\n", notification.message);
             process_client_message(&notification);
-            break;
-
-        case NOTIFICATION_TYPE__KEEPALIVE:
-            answer_keep_alive();
             break;
 
         default:
