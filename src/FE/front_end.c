@@ -55,11 +55,14 @@ pthread_mutex_t MUTEX_CONSUMER = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_MESSAGE_QUEUE = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_APPEND_LIST = PTHREAD_MUTEX_INITIALIZER;
 
+void cancel_thread(void *);
+void close_socket(void *);
 void sigint_handler(int);
 void handle_signals(void);
 int handle_server_connection(struct sockaddr_in *);
 void *listen_server_connection(void *);
 void *keep_server_connection(void *);
+void keep_alive_with_server(void);
 void *listen_message_processor(void *);
 void *listen_client_connection(void *);
 void process_client_message(NOTIFICATION *);
