@@ -21,6 +21,7 @@
 #include "savefile.h"
 #include "server_ring.h"
 #include "socket.h"
+#include "front_end.h"
 
 typedef int boolean;
 #define FALSE 0
@@ -36,14 +37,16 @@ void handle_connection_leader_question(int);
 void handle_connection_keepalive(int);
 void handle_connection_election(NOTIFICATION *, int sockfd);
 void handle_connection_elected(NOTIFICATION *);
+void handle_connection_fe(int, NOTIFICATION *);
 void close_socket(void *);
 void cancel_thread(void *);
 void sigint_handler(int);
 void handle_signals(void);
 void *handle_eof(void *);
 void cleanup(int);
-USER *login_user(int, char *);
-void process_message(void *);
+USER *login_user(char *);
+USER *logout_user(char *);
+void process_message(NOTIFICATION *, USER *);
 void receive_message(NOTIFICATION *, USER *);
 void follow_user(NOTIFICATION *, USER *);
 void print_username(void *);
@@ -56,6 +59,8 @@ int sockfd = 0;
 SERVER_RING *server_ring = NULL;
 
 HASH_TABLE user_hash_table = NULL;
+
+int FE_SOCKFDS[NUMBER_OF_FES];
 
 // MUTEXES
 pthread_mutex_t MUTEX_LOGIN = PTHREAD_MUTEX_INITIALIZER;
@@ -138,61 +143,44 @@ int get_free_socket_spot(int *sockets_fd)
     return -1;
 }
 
-USER *login_user(int sockfd, char *username)
+USER *login_user(char *username)
 {
-    // char username[MAX_USERNAME_LENGTH];
+    logger_info("Attempting to log user: %s\n", username);
 
-    // int bytes_read = read(sockfd, (void *)username, sizeof(char) * MAX_USERNAME_LENGTH);
-    // if (bytes_read < 0)
-    // {
-    //     logger_error("Couldn't read username for socket %d\n", sockfd);
-    //     return NULL;
-    // }
-
-    // Only one user can be logged in each time
     LOCK(MUTEX_LOGIN);
 
     HASH_NODE *hash_node = hash_find(user_hash_table, username);
     if (hash_node == NULL)
     {
-        logger_info("New user logged: %s\n", username);
+        logger_info("User didn't existed, just created it\n");
         USER *user = init_user();
 
         strcpy(user->username, username);
-        user->sockets_fd[0] = sockfd;
         user->sessions_number = 1;
 
         hash_node = hash_insert(user_hash_table, username, (void *)user);
 
         // Need to unlock here because of early return
         UNLOCK(MUTEX_LOGIN);
-        return user;
-    }
-
-    USER *user = (USER *)hash_node->value;
-
-    // Do not allow to play around with user while logging a new user
-    LOCK(user->mutex);
-    if (user->sessions_number < MAX_SESSIONS)
-    {
-        int free_socket_spot = get_free_socket_spot(user->sockets_fd);
-        logger_info("User in another session: %s\n", user->username);
-        logger_info("sessions: %d\n", user->sessions_number);
-        logger_info("Saving socket in position: %d\n", free_socket_spot);
-        user->sockets_fd[free_socket_spot] = sockfd;
-        user->sessions_number++;
-
-        // Need to duplicate because of early return
-        UNLOCK(user->mutex);
-        UNLOCK(MUTEX_LOGIN);
 
         return user;
     }
-
-    UNLOCK(user->mutex);
     UNLOCK(MUTEX_LOGIN);
 
-    return NULL;
+    // User already existed, will just increment the session number
+    USER *user = (USER *)hash_node->value;
+    user->sessions_number++;
+
+    return user;
+}
+
+USER *logout_user(char *username)
+{
+    HASH_NODE *hash_node = hash_find(user_hash_table, username);
+    USER *user = (USER *)hash_node->value;
+    user->sessions_number--;
+
+    return user;
 }
 
 void print_username(void *void_parameter)
@@ -301,18 +289,17 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
     UNLOCK(MUTEX_FOLLOW);
 }
 
-void process_message(void *void_message_to_process)
+void process_message(NOTIFICATION *notification, USER *user)
 {
-    MESSAGE_TO_PROCESS *message_to_process = (MESSAGE_TO_PROCESS *)void_message_to_process;
-    if (message_to_process->notification->command == FOLLOW)
+    if (notification->command == FOLLOW)
     {
-        logger_info("Following user: %s\n", message_to_process->notification->message);
-        follow_user(message_to_process->notification, message_to_process->user);
+        logger_info("Following user: %s\n", notification->message);
+        follow_user(notification, user);
     }
-    else if (message_to_process->notification->command == SEND)
+    else if (notification->command == SEND)
     {
-        logger_info("Received message: %s\n", message_to_process->notification->message);
-        receive_message(message_to_process->notification, message_to_process->user);
+        logger_info("Received message: %s\n", notification->message);
+        receive_message(notification, user);
     }
 }
 
@@ -360,17 +347,13 @@ void send_message(NOTIFICATION *notification)
 
     if (user->sessions_number > 0)
     {
-        for (int i = 0; i < MAX_SESSIONS; i++)
-        {
-            int socket_fd = user->sockets_fd[i];
-            if (socket_fd != -1)
-            {
-                if (write(socket_fd, notification, sizeof(NOTIFICATION)) < 0)
-                    logger_error("When sending notification %d to %s through socket %d\n", notification->id, user->username, socket_fd);
-                else
-                    logger_info("Sent notification %d with message '%s' to %s on socket %d\n", notification->id, notification->message, notification->receiver, socket_fd);
-            }
-        }
+        int user_hash = hash_address(user->username) % (NUMBER_OF_FES);
+        int socket_fd = FE_SOCKFDS[user_hash];
+
+        if (write(socket_fd, notification, sizeof(NOTIFICATION)) < 0)
+            logger_error("When sending notification %d to %s through socket %d\n", notification->id, user->username, socket_fd);
+        else
+            logger_info("Sent notification %d with message '%s' to %s 's FE on socket %d\n", notification->id, notification->message, notification->receiver, socket_fd);
     }
     else
     {
@@ -398,9 +381,9 @@ void *handle_connection(void *void_sockfd)
 
     switch (notification.type)
     {
-    case NOTIFICATION_TYPE__LOGIN:
-        logger_info("[Socket %d] Received connection with LOGIN type\n", sockfd);
-        handle_connection_login(sockfd, &notification);
+    case NOTIFICATION_TYPE__FE_CONNECTION:
+        logger_info("[Socket %d] Received connection with FE_CONNECTION type. Will have a separate thread for it\n", sockfd);
+        handle_connection_fe(sockfd, &notification);
         break;
     case NOTIFICATION_TYPE__LEADER_QUESTION:
         logger_info("[Socket %d] Received connection with LEADER_QUESTION type\n", sockfd);
@@ -429,27 +412,14 @@ void *handle_connection(void *void_sockfd)
         break;
     }
 
+    close(sockfd);
+
     return NULL;
 }
 
 void handle_connection_login(int sockfd, NOTIFICATION *notification)
 {
-
-    NOTIFICATION new_notification;
-    USER *current_user = login_user(sockfd, notification->author);
-    boolean can_login = current_user != NULL;
-
-    int bytes_read = write(sockfd, &can_login, sizeof(can_login));
-    if (bytes_read < 0)
-    {
-        logger_error("[Socket %d] When sending login ACK/NACK (%d)\n", sockfd, can_login);
-        return;
-    }
-    if (!can_login)
-    {
-        logger_error("User couldn't login! Max connections (%d) reached\n", MAX_SESSIONS);
-        return;
-    }
+    USER *current_user = login_user(notification->author);
 
     // Do not allow to add any new notification while we haven't sent the others
     LOCK(MUTEX_PENDING_NOTIFICATIONS);
@@ -457,8 +427,9 @@ void handle_connection_login(int sockfd, NOTIFICATION *notification)
     while (pending_notification)
     {
         NOTIFICATION *notification = (NOTIFICATION *)pending_notification->val;
+        strcpy(notification->receiver, current_user->username);
 
-        logger_info("[Socket %d] Sending pending notification from %d to %d\n", sockfd, notification->author, current_user->username);
+        logger_info("[Socket %d] Sending back pending notification from %d to %d\n", sockfd, notification->author, current_user->username);
         send_message(notification);
 
         pending_notification = pending_notification->next;
@@ -467,51 +438,6 @@ void handle_connection_login(int sockfd, NOTIFICATION *notification)
     // We have sent them all, so we can clean it
     current_user->pending_notifications = NULL;
     UNLOCK(MUTEX_PENDING_NOTIFICATIONS);
-
-    while (1)
-    {
-        bzero((void *)&new_notification, sizeof(NOTIFICATION));
-
-        /* read from the socket */
-        bytes_read = read(sockfd, (void *)&new_notification, sizeof(NOTIFICATION));
-        if (bytes_read < 0)
-        {
-            logger_error("[Socket %d] When reading from socket\n", sockfd);
-        }
-        else if (bytes_read == 0)
-        {
-            logger_info("[Socket %d] Client closed connection\n", sockfd);
-
-            // Lock user while playing around with sockets list
-            LOCK(current_user->mutex);
-            current_user->sessions_number--;
-            for (int i = 0; i < MAX_SESSIONS; i++)
-                if (current_user->sockets_fd[i] == sockfd)
-                {
-                    logger_info("[Socket %d] Freed %d socket position\n", i);
-                    current_user->sockets_fd[i] = -1;
-                    break;
-                }
-            UNLOCK(current_user->mutex);
-
-            return;
-        }
-        else
-        {
-            pthread_t tid;
-
-            // Create copy to pass to the other thread and not be overriden
-            NOTIFICATION *notification_copy = (NOTIFICATION *)calloc(1, sizeof(NOTIFICATION));
-            memcpy(notification_copy, &notification, sizeof(NOTIFICATION));
-            logger_info("[Socket %d] Here is the message: %s\n", sockfd, notification_copy->message);
-
-            MESSAGE_TO_PROCESS *message_to_process = (MESSAGE_TO_PROCESS *)calloc(1, sizeof(MESSAGE_TO_PROCESS));
-            message_to_process->notification = notification_copy;
-            message_to_process->user = current_user;
-            pthread_create(&tid, NULL, (void *(*)(void *)) & process_message, (void *)message_to_process);
-            logger_info("[Socket %d] Proccessing message %d on brand new thread %ld\n", sockfd, notification_copy->id, tid);
-        }
-    };
 }
 
 void handle_connection_leader_question(int sockfd)
@@ -703,6 +629,44 @@ void handle_connection_keepalive(int sockfd)
             return;
         }
     }
+}
+
+void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
+{
+    FE_SOCKFDS[connection_notification->data] = sockfd;
+    HASH_NODE *hash_node;
+    USER *user;
+
+    // TODO: Keep hearing from this FE any incoming message
+    while (1)
+    {
+        NOTIFICATION notification;
+        int bytes_read = read(sockfd, (void *)&notification, sizeof(NOTIFICATION));
+        if (bytes_read < 0)
+        {
+            logger_error("Couldn't read notification from socket %d\n", sockfd);
+            return;
+        }
+
+        switch (notification.type)
+        {
+        case NOTIFICATION_TYPE__LOGIN:
+            logger_info("[Socket %d] Received connection with LOGIN type\n", sockfd);
+            handle_connection_login(sockfd, &notification);
+            break;
+        case NOTIFICATION_TYPE__MESSAGE:
+            hash_node = hash_find(user_hash_table, notification.author);
+            user = (USER *)hash_node->value;
+            process_message(&notification, user);
+            break;
+        default:
+            logger_info("[Socket %d] Unhandable message with %d type. Ignoring...\n", sockfd, notification.type);
+            break;
+        }
+    }
+    close(sockfd);
+
+    return;
 }
 
 void close_socket(void *void_socket)

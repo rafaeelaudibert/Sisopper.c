@@ -18,7 +18,6 @@
 #include "user.h"
 #include "hash.h"
 #include "notification.h"
-#include "savefile.h"
 #include "server_ring.h"
 #include "socket.h"
 #include "front_end.h"
@@ -72,6 +71,8 @@ void cleanup(int);
 SERVER_RING *ring;
 int IS_CONNECTED_TO_SERVER = FALSE;
 
+int front_end_port_idx = 0;
+
 int main(int argc, char *argv[])
 {
     // Sockets Address Config
@@ -96,18 +97,18 @@ int main(int argc, char *argv[])
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     bzero(&(serv_addr.sin_zero), 8);
 
-    for (int i = 0; i < (NUMBER_OF_FES) + 1; i++)
+    for (front_end_port_idx = 0; front_end_port_idx < (NUMBER_OF_FES) + 1; front_end_port_idx++)
     {
-        if (i == NUMBER_OF_FES)
+        if (front_end_port_idx == NUMBER_OF_FES)
         {
             // We have no more FEs to connect to
-            logger_error("When trying to bind to the available FE ports\n");
+            logger_error("When trying to bind to the available FE ports, couldn't find any assignable open port\n");
             exit(ERROR_BINDING_SOCKET);
         }
 
-        port = FE_PORTS[i];
+        port = FE_PORTS[front_end_port_idx];
         serv_addr.sin_port = htons(port);
-        struct hostent *in_addr = gethostbyname(FE_HOSTS[i]);
+        struct hostent *in_addr = gethostbyname(FE_HOSTS[front_end_port_idx]);
         serv_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
 
         // If can bind, break out of here
@@ -205,44 +206,49 @@ int handle_server_connection(struct sockaddr_in *serv_addr)
 void *listen_server_connection(void *void_sockfd)
 {
     NOTIFICATION notification;
-    int is_server_connected = TRUE;
     int bytes_read;
 
-    while (is_server_connected)
+    while (1)
     {
+        if (!IS_CONNECTED_TO_SERVER)
+        {
+            sleep(1);
+            continue;
+        }
+
         bzero((void *)&notification, sizeof(NOTIFICATION));
         bytes_read = read(sockfd, (void *)&notification, sizeof(NOTIFICATION));
 
         if (bytes_read < 0)
         {
             logger_error("[Socket %d] When reading from socket\n", sockfd);
-            is_server_connected = FALSE;
+            continue;
         }
         else if (bytes_read == 0)
         {
             logger_info("[Socket %d] Server closed connection\n", sockfd);
-            is_server_connected = FALSE;
+            continue;
         }
 
-        if (!is_server_connected)
-            break;
-
-        switch (notification.type)
+        if (notification.type != NOTIFICATION_TYPE__MESSAGE && notification.type != NOTIFICATION_TYPE__INFO)
         {
-
-        case NOTIFICATION_TYPE__MESSAGE:
-            logger_info("Received message from server: %s\n", notification.message);
-            //process_server_message(&notification);
-            break;
-
-        case NOTIFICATION_TYPE__INFO:
-            logger_info("Received info from server: %s\n", notification.message);
-            //process_server_message(&notification);
-            break;
-
-        default:
             logger_warn("Received unexpected notification %d from server. Will just ignore it\n", notification.type);
-            break;
+            continue;
+        }
+
+        // Send back notification to the connected users
+        HASH_NODE *node = hash_find(user_hash_table, notification.receiver);
+        USER *user = (USER *)node->value;
+        for (int i = 0; i < MAX_SESSIONS; i++)
+        {
+            int socket_fd = user->sockets_fd[i];
+            if (socket_fd != -1)
+            {
+                if (write(socket_fd, &notification, sizeof(NOTIFICATION)) < 0)
+                    logger_error("When sending notification %d to %s through socket %d\n", notification.id, user->username, socket_fd);
+                else
+                    logger_info("Sent notification %d with message '%s' to %s on socket %d\n", notification.id, notification.message, notification.receiver, socket_fd);
+            }
         }
     }
 
@@ -307,6 +313,14 @@ SERVER_RING *connect_to_leader()
             if (connect(ring->primary_fd, (struct sockaddr *)&primary_addr, sizeof(primary_addr)) < 0)
             {
                 logger_error("When trying to connect to primary server. Will retry another ring search...\n");
+                continue;
+            }
+
+            NOTIFICATION connect_notification = {.type = NOTIFICATION_TYPE__FE_CONNECTION, .data = front_end_port_idx};
+            bytes_wrote = write(ring->primary_fd, (void *)&connect_notification, sizeof(NOTIFICATION));
+            if (bytes_wrote < 0)
+            {
+                logger_error("Error when trying to connect to primary server. Will retry with another ring search...\n");
                 continue;
             }
 
@@ -589,8 +603,6 @@ void close_socket(void *void_socket)
 
 void cleanup(int exit_code)
 {
-    save_savefile(user_hash_table);
-
     chained_list_iterate(chained_list_threads, &cancel_thread);
     chained_list_iterate(chained_list_sockets_fd, &close_socket);
     chained_list_free(chained_list_threads);
