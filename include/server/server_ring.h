@@ -1,7 +1,7 @@
 #ifndef SERVER_RING_H
 #define SERVER_RING_H
 
-#define MAX_RING_SIZE 20
+#define MAX_RING_SIZE 10
 
 #include <pthread.h>
 
