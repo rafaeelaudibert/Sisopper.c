@@ -125,7 +125,8 @@ int main(int argc, char *argv[])
         cleanup(ERROR_CONFIGURATION_SOCKET);
     }
 
-    int port = FE_PORTS[user_hash_idx];
+    //int port = FE_PORTS[user_hash_idx]; tem que subir todos os proxys para isso funcionar
+    int port = FE_PORTS[0];
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
