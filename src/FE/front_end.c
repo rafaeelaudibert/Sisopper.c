@@ -434,29 +434,35 @@ int get_free_socket_spot(int *sockets_fd)
 
 USER *login_user(int sockfd)
 {
-    char username[MAX_USERNAME_LENGTH];
+    NOTIFICATION notification;
 
-    int bytes_read = read(sockfd, (void *)username, sizeof(char) * MAX_USERNAME_LENGTH);
+    int bytes_read = read(sockfd, (void *)&notification, sizeof(NOTIFICATION));
     if (bytes_read < 0)
     {
         logger_error("Couldn't read username for socket %d\n", sockfd);
         return NULL;
     }
 
+    if (notification.type != NOTIFICATION_TYPE__LOGIN)
+    {
+        logger_error("Expected NOTIFICATION_TYPE__LOGIN from client but received %d... Will cancell thread\n", notification.type);
+        return NULL;
+    }
+
     // Only one user can be logged in each time
     LOCK(MUTEX_LOGIN);
 
-    HASH_NODE *hash_node = hash_find(user_hash_table, username);
+    HASH_NODE *hash_node = hash_find(user_hash_table, notification.author);
     if (hash_node == NULL)
     {
-        logger_info("New user logged: %s\n", username);
+        logger_info("New user logged: %s\n", notification.author);
         USER *user = init_user();
 
-        strcpy(user->username, username);
+        strcpy(user->username, notification.author);
         user->sockets_fd[0] = sockfd;
         user->sessions_number = 1;
 
-        hash_node = hash_insert(user_hash_table, username, (void *)user);
+        hash_node = hash_insert(user_hash_table, user->username, (void *)user);
 
         // Need to unlock here because of early return
         UNLOCK(MUTEX_LOGIN);
@@ -464,13 +470,13 @@ USER *login_user(int sockfd)
     }
 
     USER *user = (USER *)hash_node->value;
+    logger_info("Logging in user %s...\n", user->username);
 
     // Do not allow to play around with user while logging a new user
     LOCK(user->mutex);
     if (user->sessions_number < MAX_SESSIONS)
     {
         int free_socket_spot = get_free_socket_spot(user->sockets_fd);
-        logger_info("User in another session: %s\n", user->username);
         logger_info("Total sessions: %d\n", user->sessions_number);
         logger_info("Saving socket in position: %d\n", free_socket_spot);
         user->sockets_fd[free_socket_spot] = sockfd;
@@ -510,9 +516,12 @@ void *listen_client_connection(void *void_sockfd)
     }
 
     // Tell server that this guy logged in
-    NOTIFICATION user_login = {.type = NOTIFICATION_TYPE__LOGIN};
-    strcpy(user_login.author, current_user->username);
-    send_server(&user_login);
+    NOTIFICATION *user_login = (NOTIFICATION *)malloc(sizeof(NOTIFICATION));
+    user_login->type = NOTIFICATION_TYPE__LOGIN;
+    strcpy(user_login->author, current_user->username);
+    logger_info("Sending NOTIFICATION_TYPE__LOGIN to server with username %s\n", user_login->author);
+
+    send_server(user_login);
 
     // Keep receiving messages from the client, and sending them to the server
     while (1)
@@ -543,9 +552,12 @@ void *listen_client_connection(void *void_sockfd)
             UNLOCK(current_user->mutex);
 
             // Tell server about this logout
-            NOTIFICATION user_logout = {.type = NOTIFICATION_TYPE__LOGOUT};
-            strcpy(user_logout.author, current_user->username);
-            send_server(&user_logout);
+            NOTIFICATION *user_logout = (NOTIFICATION *)malloc(sizeof(NOTIFICATION));
+            user_logout->type = NOTIFICATION_TYPE__LOGOUT;
+            strcpy(user_logout->author, current_user->username);
+            logger_info("Sending NOTIFICATION_TYPE__LOGOUT to server with username %s\n", user_logout->author);
+
+            send_server(user_logout);
 
             return NULL;
         }
@@ -607,6 +619,7 @@ void cleanup(int exit_code)
     chained_list_iterate(chained_list_sockets_fd, &close_socket);
     chained_list_free(chained_list_threads);
     chained_list_free(chained_list_sockets_fd);
+    chained_list_free(chained_list_messages);
 
     exit(exit_code);
 }

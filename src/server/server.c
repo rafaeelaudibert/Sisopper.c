@@ -217,7 +217,7 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
     if (followed_user_node == NULL)
     {
         char *error_message = (char *)calloc(220, sizeof(char));
-        sprintf(error_message, "Could not follow the user %s. It doesn't exist", user_to_follow_username);
+        sprintf(error_message, "Could not follow the user %s. It doesn't exist\n", user_to_follow_username);
 
         NOTIFICATION notification = {
             .command = (COMMAND)NULL,
@@ -648,6 +648,8 @@ void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
             return;
         }
 
+        logger_info("Received NOTIFICATION from FE with id %d and type %d and message %s\n", notification.id, notification.type, notification.message);
+
         switch (notification.type)
         {
         case NOTIFICATION_TYPE__LOGIN:
@@ -655,6 +657,7 @@ void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
             handle_connection_login(sockfd, &notification);
             break;
         case NOTIFICATION_TYPE__MESSAGE:
+            logger_info("MESSAGE from author %s and other things %d %s\n", notification.author, notification.command, notification.receiver);
             hash_node = hash_find(user_hash_table, notification.author);
             user = (USER *)hash_node->value;
             process_message(&notification, user);
