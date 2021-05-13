@@ -36,7 +36,6 @@ static int received_sigint = FALSE;
 
 int serverRM_socket;
 int serverRM_keepalive_socket;
-int client_connections_socket;
 int serverRM_online = FALSE;
 
 pthread_t reconnect_tid;
@@ -74,7 +73,10 @@ int main(int argc, char *argv[])
 {
     // Sockets Address Config
     struct sockaddr_in serv_addr, client_addr;
-    int port;
+    int port = 0;
+
+    // Variables used below to connect to the incoming client connections
+    socklen_t clilen = sizeof(struct sockaddr_in);
 
     handle_signals();
 
@@ -105,6 +107,7 @@ int main(int argc, char *argv[])
         // If can bind, break out of here
         if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) >= 0)
             break;
+
     }
 
     if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
@@ -118,24 +121,21 @@ int main(int argc, char *argv[])
 
     logger_info("Listening on port %d...\n", port);
 
-    // Incoming message listener
-    pthread_create(&message_consumer_tid, NULL, (void *(*)(void *)) & listen_message_processor, NULL);
-
-    // Variables used below to connect to the incoming client connections
-    socklen_t clilen = sizeof(struct sockaddr_in);
-    struct sockaddr_in cli_addr;
+    // Incoming message listener ---> está dando seg fault do nada
+    //pthread_create(&message_consumer_tid, NULL, (void *(*)(void *)) & listen_message_processor, NULL);
 
     while (TRUE)
     {
         int *newsockfd = (int *)malloc(sizeof(int));
+        *newsockfd = accept(sockfd, (struct sockaddr *)&client_addr, &clilen);
 
-        if ((*newsockfd = accept(client_connections_socket, (struct sockaddr *)&cli_addr, &clilen)) < 0)
+        if (*newsockfd == -1)
         {
             logger_error("When accepting client connection\n");
             cleanup(ERROR_ACCEPT);
         }
 
-        logger_info("New Client connection from %s:%d\n", inet_ntoa(cli_addr.sin_addr), cli_addr.sin_port);
+        logger_info("New Client connection from %s:%d\n", inet_ntoa(client_addr.sin_addr), client_addr.sin_port);
 
         pthread_t *thread = (pthread_t *)malloc(sizeof(pthread_t));
         pthread_create(thread, NULL, (void *(*)(void *)) & listen_client_connection, (void *)newsockfd);
@@ -462,10 +462,9 @@ void process_client_message(NOTIFICATION *notification)
 void send_server(NOTIFICATION *notification)
 {
     int status;
-
     do
     {
-        status = send_notification(notification, ring->primary_fd);
+      status = send_notification(notification, ring->primary_fd);
     } while (status < 0);
 }
 
