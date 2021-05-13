@@ -258,8 +258,6 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
             user->followers = chained_list_append_end(user->followers, dup_current_user_username);
             logger_debug("New list of followers: ");
             chained_list_print(user->followers, &print_username);
-            save_savefile(user_hash_table);
-
 
             char *info_message = (char *)calloc(220, sizeof(char));
             sprintf(info_message, "The user '%s' was followed!", user_to_follow_username);
@@ -591,13 +589,15 @@ void send_inicial_replication(int sockfd)
 
 void send_replication(NOTIFICATION *original)
 {   
+    logger_debug("send_replication");
     int keep_replicating = 1;
     // Creating and configuring sockfd for the keepalive
     int sockfd = socket_create();
     server_ring_connect_with_next_server(server_ring, sockfd);
 
     if (server_ring->server_ring_ports[server_ring->primary_idx] == server_ring->server_ring_ports[server_ring->next_index])
-    { // Should stop replication on next connection
+    {
+        logger_debug("Should stop replication on next connection");
         keep_replicating = 0;
     }
 
@@ -850,8 +850,6 @@ void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
         }
     }
     close(sockfd);
-
-    return;
 }
 
 void close_socket(void *void_socket)
