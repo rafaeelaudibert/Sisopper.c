@@ -659,6 +659,7 @@ void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
         case NOTIFICATION_TYPE__LOGOUT:
             logger_info("[Socket %d] Received connection with LOGOUT type\n", sockfd);
             logout_user(notification.author);
+            return;
             break;
         case NOTIFICATION_TYPE__MESSAGE:
             logger_info("MESSAGE from author %s and other things %d %s\n", notification.author, notification.command, notification.receiver);
