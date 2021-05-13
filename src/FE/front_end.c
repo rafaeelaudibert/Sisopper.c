@@ -37,6 +37,7 @@ static int received_sigint = FALSE;
 int serverRM_socket;
 int serverRM_keepalive_socket;
 int serverRM_online = FALSE;
+int sockfd = 0;
 
 pthread_t reconnect_tid;
 pthread_t message_consumer_tid;
@@ -84,7 +85,7 @@ int main(int argc, char *argv[])
     pthread_create(&reconnect_tid, NULL, (void *(*)(void *)) & keep_server_connection, NULL);
 
     // Creating this socket
-    int sockfd = socket_create();
+    sockfd = socket_create();
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -107,7 +108,6 @@ int main(int argc, char *argv[])
         // If can bind, break out of here
         if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) >= 0)
             break;
-
     }
 
     if (listen(sockfd, CONNECTIONS_TO_ACCEPT) < 0)
@@ -197,7 +197,7 @@ int handle_server_connection(struct sockaddr_in *serv_addr)
     return 0;
 }
 
-void *listen_server_connection(void *sockfd)
+void *listen_server_connection(void *void_sockfd)
 {
     NOTIFICATION notification;
     int is_server_connected = TRUE;
@@ -394,7 +394,7 @@ void *listen_message_processor(void *_)
     }
 }
 
-void *listen_client_connection(void *sockfd)
+void *listen_client_connection(void *void_sockfd)
 {
     char username[MAX_USERNAME_LENGTH];
 
@@ -402,7 +402,8 @@ void *listen_client_connection(void *sockfd)
     int known_user_ID = FALSE;
     int is_client_connected = TRUE;
     int bytes_read;
-
+    int sockfd = *((int *)void_sockfd);
+    
     while (is_client_connected)
     {
         bzero((void *)&notification, sizeof(NOTIFICATION));
