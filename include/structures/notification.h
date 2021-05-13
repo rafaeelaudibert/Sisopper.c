@@ -6,6 +6,13 @@
 
 #include "config.h"
 
+typedef enum Command
+{
+    SEND = 1,
+    FOLLOW,
+    UNKNOWN,
+} COMMAND;
+
 typedef enum
 {
     NOTIFICATION_TYPE__MESSAGE,
@@ -20,6 +27,7 @@ typedef enum
 
 typedef struct __notification
 {
+    COMMAND command;
     uint32_t id;                            // Identificador da notificação (sugere-se um identificador único)
     time_t timestamp;                       // Timestamp da notificação
     NOTIFICATION_TYPE type;                 // Tipo da notificação, para saber como mostrar na tela

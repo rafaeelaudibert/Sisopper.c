@@ -1,7 +1,7 @@
 #ifndef SERVER_RING_H
 #define SERVER_RING_H
 
-#define MAX_RING_SIZE 20
+#define MAX_RING_SIZE 10
 
 #include <pthread.h>
 
@@ -18,6 +18,7 @@ typedef struct server_ring
 
     int is_primary;
     int primary_idx;
+    int primary_fd;
 
     int keepalive_fd;
     pthread_t keepalive_tid;

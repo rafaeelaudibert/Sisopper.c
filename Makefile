@@ -1,12 +1,13 @@
 CC=gcc
-FLAGS=-Wall -Wpedantic -g -pthread -Iinclude/client -Iinclude/server -Iinclude/structures -Iinclude/utils
+FLAGS=-Wall -Wpedantic -g -pthread -Iinclude/client -Iinclude/server -Iinclude/structures -Iinclude/utils -Iinclude/FE
 LIBRARIES=-lncurses
 
 BIN_FOLDER=./bin
 SERVER_BIN=${BIN_FOLDER}/server
 CLIENT_BIN=${BIN_FOLDER}/client
+FRONT_END_BIN=${BIN_FOLDER}/front_end
 
-all: server client
+all: server client front_end
 	@echo "Done!"
 
 # On release, remove debug, activate O2 optimization and removes debug prints
@@ -20,14 +21,24 @@ server: server.o chained_list.o logger.o hash.o savefile.o user.o server_ring.o 
 server.o: src/server/server.c
 	${CC} ${FLAGS} -c src/server/server.c
 
-server_ring.o: src/server/server_ring.c
-	${CC} ${FLAGS} -c src/server/server_ring.c
-
 savefile.o: src/server/savefile.c
 	${CC} ${FLAGS} -c src/server/savefile.c
 
+# FE related
+front_end: front_end.o chained_list.o logger.o hash.o savefile.o user.o server_ring.o socket.o
+	${CC} ${FLAGS} -o ${FRONT_END_BIN} front_end.o chained_list.o logger.o hash.o savefile.o user.o server_ring.o socket.o ${LIBARIES}
+
+front_end.o: src/FE/front_end.c
+	${CC} ${FLAGS} -c src/FE/front_end.c
+
+
+# Server + FE
+server_ring.o: src/server/server_ring.c
+	${CC} ${FLAGS} -c src/server/server_ring.c
+
+
 # Client related
-client: client.o logger.o  hash.o ui.o chained_list.o
+client: client.o logger.o hash.o ui.o chained_list.o
 	${CC} ${FLAGS} -o ${CLIENT_BIN} client.o logger.o  hash.o ui.o chained_list.o ${LIBRARIES}
 
 client.o: src/client/client.c
@@ -55,7 +66,7 @@ logger.o: src/utils/logger.c
 
 # Clear
 clear:
-	rm ${BIN_FOLDER}/server ${BIN_FOLDER}/client *.o
+	rm ${SERVER_BIN} ${CLIENT_BIN} ${FRONT_END_BIN} *.o
 
 # Remove the savefile
 clear_savefile:

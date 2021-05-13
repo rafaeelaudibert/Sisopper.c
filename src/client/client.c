@@ -11,13 +11,13 @@
 #include <signal.h>
 #include <assert.h>
 
-#include "config.h"
 #include "exit_errors.h"
 #include "logger.h"
 #include "notification.h"
-#include "packet.h"
 #include "user.h"
+#include "hash.h"
 #include "ui.h"
+#include "front_end.h"
 
 typedef int boolean;
 #define FALSE 0
@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
 
     if (argc < 2)
     {
-        logger_info("Usage: %s <profile> <server address=%s> <port=%d>\n", argv[0], DEFAULT_HOST, DEFAULT_PORT);
+        logger_info("Usage: %s <profile>\n", argv[0]);
         exit(NOT_ENOUGH_ARGUMENTS_ERROR);
     }
 
@@ -83,7 +83,9 @@ int main(int argc, char *argv[])
 
     UI_start(user_handle);
 
-    struct hostent *server = argc >= 3 ? gethostbyname(argv[2]) : gethostbyname(DEFAULT_HOST);
+    int user_hash_idx = hash_address(user_handle) % NUMBER_OF_FES;
+
+    struct hostent *server = gethostbyname(FE_HOSTS[user_hash_idx]);
     if (server == NULL)
     {
         char *error_message = "No such host";
@@ -123,7 +125,7 @@ int main(int argc, char *argv[])
         cleanup(ERROR_CONFIGURATION_SOCKET);
     }
 
-    int port = argc >= 4 ? atoi(argv[3]) : DEFAULT_PORT;
+    int port = FE_PORTS[user_hash_idx];
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
@@ -143,12 +145,12 @@ int main(int argc, char *argv[])
     }
 
     NOTIFICATION notification = {
+        .command = (COMMAND) NULL,
         .id = ++MESSAGE_GLOBAL_ID,
         .timestamp = time(NULL),
         .type = NOTIFICATION_TYPE__LOGIN,
         .receiver = NULL,
-        .message = NULL
-    };
+        .message = NULL};
     strcpy(notification.author, user_handle);
 
     bytes_read = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
@@ -214,11 +216,11 @@ int main(int argc, char *argv[])
         strcpy(buffer, remove_command_from_message(command, buffer));
 
         NOTIFICATION notification = {
+            .command = command,
             .id = ++MESSAGE_GLOBAL_ID,
             .timestamp = time(NULL),
             .type = NOTIFICATION_TYPE__MESSAGE,
-            .receiver = NULL
-        };
+            .receiver = NULL};
         strcpy(notification.author, user_handle);
         strcpy(notification.message, buffer);
 

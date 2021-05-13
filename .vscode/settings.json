@@ -7,7 +7,6 @@
         "config.h": "c",
         "logger.h": "c",
         "socket.h": "c",
-        "packet.h": "c",
         "ui.h": "c",
         "cstdlib": "c",
         "chained_list.h": "c",
@@ -15,6 +14,7 @@
         "time.h": "c",
         "types.h": "c",
         "stdio.h": "c",
-        "notification.h": "c"
+        "notification.h": "c",
+        "front_end.h": "c"
     }
 }
