@@ -14,6 +14,7 @@
         "time.h": "c",
         "types.h": "c",
         "stdio.h": "c",
-        "notification.h": "c"
+        "notification.h": "c",
+        "front_end.h": "c"
     }
 }

@@ -1,6 +1,5 @@
 #include "server_ring.h"
 #include "exit_errors.h"
-#include "config.h"
 #include "logger.h"
 #include "notification.h"
 #include "socket.h"

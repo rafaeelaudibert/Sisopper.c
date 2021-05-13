@@ -11,13 +11,13 @@
 #include <signal.h>
 #include <assert.h>
 
-#include "config.h"
 #include "exit_errors.h"
 #include "logger.h"
 #include "notification.h"
 #include "user.h"
 #include "hash.h"
 #include "ui.h"
+#include "front_end.h"
 
 typedef int boolean;
 #define FALSE 0

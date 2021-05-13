@@ -22,8 +22,6 @@
 #include "server_ring.h"
 #include "socket.h"
 
-#include "config.h"
-
 typedef int boolean;
 #define FALSE 0
 #define TRUE 1

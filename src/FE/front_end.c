@@ -21,8 +21,7 @@
 #include "savefile.h"
 #include "server_ring.h"
 #include "socket.h"
-
-#include "config.h"
+#include "front_end.h"
 
 #define LOCK(mutex) pthread_mutex_lock(&mutex)
 #define UNLOCK(mutex) pthread_mutex_unlock(&mutex)

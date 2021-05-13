@@ -1,5 +1,5 @@
 CC=gcc
-FLAGS=-Wall -Wpedantic -g -pthread -Iinclude/client -Iinclude/server -Iinclude/structures -Iinclude/utils
+FLAGS=-Wall -Wpedantic -g -pthread -Iinclude/client -Iinclude/server -Iinclude/structures -Iinclude/utils -Iinclude/FE
 LIBRARIES=-lncurses
 
 BIN_FOLDER=./bin

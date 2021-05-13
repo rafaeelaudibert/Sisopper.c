@@ -5,8 +5,8 @@
 #include <string.h>
 
 #include "logger.h"
-#include "savefile.h"
 #include "user.h"
+#include "savefile.h"
 
 HASH_TABLE read_savefile()
 {
