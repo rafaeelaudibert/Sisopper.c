@@ -37,9 +37,7 @@ static int received_sigint = FALSE;
 int serverRM_socket;
 int serverRM_keepalive_socket;
 int serverRM_online = FALSE;
-int sockfd = 0;
 
-pthread_t reconnect_tid;
 pthread_t message_consumer_tid;
 
 unsigned long long GLOBAL_NOTIFICATION_ID = 0;
@@ -75,6 +73,8 @@ int front_end_port_idx = 0;
 
 int main(int argc, char *argv[])
 {
+    pthread_t reconnect_tid, listen_connection_tid;
+
     // Sockets Address Config
     struct sockaddr_in serv_addr, client_addr;
     int port = 0;
@@ -89,9 +89,15 @@ int main(int argc, char *argv[])
 
     // Server reconnect is responsible to keep the connection to the RM
     pthread_create(&reconnect_tid, NULL, (void *(*)(void *)) & keep_server_connection, NULL);
+    chained_list_threads = chained_list_append_end(chained_list_threads, (void *)reconnect_tid);
+
+    // Thread to communicate with server
+    pthread_create(&listen_connection_tid, NULL, (void *(*)(void *)) & listen_server_connection, NULL);
+    chained_list_threads = chained_list_append_end(chained_list_threads, (void *)listen_connection_tid);
+    logger_debug("Created new thread %ld to handle server connection\n", listen_connection_tid);
 
     // Creating this socket
-    sockfd = socket_create();
+    int sockfd = socket_create();
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -127,7 +133,7 @@ int main(int argc, char *argv[])
 
     logger_info("Listening on port %d...\n", port);
 
-    // Incoming message listener ---> está dando seg fault do nada
+    // Incoming message listener
     pthread_create(&message_consumer_tid, NULL, (void *(*)(void *)) & listen_message_processor, NULL);
 
     while (TRUE)
@@ -185,25 +191,13 @@ int handle_server_connection(struct sockaddr_in *serv_addr)
     if (connect(ring->primary_fd, (struct sockaddr *)serv_addr, socklen) < 0)
     {
         logger_error("When accepting connection\n");
-        UNLOCK(MUTEX_RECONNECT);
         return -1;
     }
-
-    pthread_t listen_connection_tid;
-
-    // Thread to communicate with server
-    pthread_create(&listen_connection_tid, NULL, (void *(*)(void *)) & listen_server_connection, (void *)&ring->primary_fd);
-    logger_debug("Created new thread %ld to handle this connection\n", listen_connection_tid);
-    // TODO add to thread list
-
-    LOCK(MUTEX_APPEND_LIST);
-    chained_list_threads = chained_list_append_end(chained_list_threads, (void *)listen_connection_tid);
-    UNLOCK(MUTEX_APPEND_LIST);
 
     return 0;
 }
 
-void *listen_server_connection(void *void_sockfd)
+void *listen_server_connection(void *_)
 {
     NOTIFICATION notification;
     int bytes_read;
@@ -217,22 +211,23 @@ void *listen_server_connection(void *void_sockfd)
         }
 
         bzero((void *)&notification, sizeof(NOTIFICATION));
-        bytes_read = read(sockfd, (void *)&notification, sizeof(NOTIFICATION));
+        bytes_read = read(ring->primary_fd, (void *)&notification, sizeof(NOTIFICATION));
 
         if (bytes_read < 0)
         {
-            logger_error("[Socket %d] When reading from socket\n", sockfd);
+            logger_error("[Socket %d] (listen_server_connection) When reading from socket\n", ring->primary_fd);
             continue;
         }
         else if (bytes_read == 0)
         {
-            logger_info("[Socket %d] Server closed connection\n", sockfd);
+            logger_info("[Socket %d] Server closed connection\n", ring->primary_fd);
+            IS_CONNECTED_TO_SERVER = FALSE;
             continue;
         }
 
         if (notification.type != NOTIFICATION_TYPE__MESSAGE && notification.type != NOTIFICATION_TYPE__INFO)
         {
-            logger_warn("Received unexpected notification %d from server. Will just ignore it\n", notification.type);
+            logger_warn("Received unexpected notification type %d from server. Will just ignore it\n", notification.type);
             continue;
         }
 
@@ -532,7 +527,7 @@ void *listen_client_connection(void *void_sockfd)
         bytes_read = read(sockfd, (void *)&notification, sizeof(NOTIFICATION));
         if (bytes_read < 0)
         {
-            logger_error("[Socket %d] When reading from socket\n", sockfd);
+            logger_error("[Socket %d] (listen_client_connection) When reading from socket\n", sockfd);
         }
         else if (bytes_read == 0)
         {
