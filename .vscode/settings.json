@@ -7,7 +7,6 @@
         "config.h": "c",
         "logger.h": "c",
         "socket.h": "c",
-        "packet.h": "c",
         "ui.h": "c",
         "cstdlib": "c",
         "chained_list.h": "c",
