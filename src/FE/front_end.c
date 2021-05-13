@@ -74,6 +74,7 @@ int main(int argc, char *argv[])
 {
     // Sockets Address Config
     struct sockaddr_in serv_addr, client_addr;
+    int port;
 
     handle_signals();
 
@@ -82,8 +83,6 @@ int main(int argc, char *argv[])
 
     // Creating this socket
     int sockfd = socket_create();
-
-    struct sockaddr_in serv_addr;
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -117,7 +116,7 @@ int main(int argc, char *argv[])
         exit(ERROR_LISTEN);
     }
 
-    logger_info("Listening on port %d...\n", PORT);
+    logger_info("Listening on port %d...\n", port);
 
     // Incoming message listener
     pthread_create(&message_consumer_tid, NULL, (void *(*)(void *)) & listen_message_processor, NULL);
@@ -227,17 +226,17 @@ void *listen_server_connection(void *sockfd)
         {
         case NOTIFICATION_TYPE__LOGIN:
             logger_info("Server authorized login!\n");
-            process_server_message(&notification);
+            //process_server_message(&notification);
             break;
 
         case NOTIFICATION_TYPE__MESSAGE:
             logger_info("Received message from server: %s\n", notification.message);
-            process_server_message(&notification);
+            //process_server_message(&notification);
             break;
 
         case NOTIFICATION_TYPE__INFO:
             logger_info("Received info from server: %s\n", notification.message);
-            process_server_message(&notification);
+            //process_server_message(&notification);
             break;
 
         default:
@@ -443,11 +442,11 @@ void *listen_client_connection(void *sockfd)
         }
     }
 
-    if (known_user_ID)
+    //if (known_user_ID)
         //TODO
-        disconnectUser(username);
+        //disconnectUser(username);
     //TODO
-    handle_socket_disconnection(sockfd);
+    //handle_socket_disconnection(sockfd);
 }
 
 void process_client_message(NOTIFICATION *notification)

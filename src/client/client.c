@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
     }
 
     NOTIFICATION notification = {
-        .command = NULL,
+        .command = (COMMAND) NULL,
         .id = ++MESSAGE_GLOBAL_ID,
         .timestamp = time(NULL),
         .type = NOTIFICATION_TYPE__LOGIN,

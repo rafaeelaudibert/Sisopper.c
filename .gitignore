@@ -5,3 +5,4 @@ bin/client
 bin/server
 
 .savefile
+bin/
