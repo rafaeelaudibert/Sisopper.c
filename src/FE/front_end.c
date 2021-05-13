@@ -36,8 +36,8 @@ static int received_sigint = FALSE;
 
 int serverRM_socket;
 int serverRM_keepalive_socket;
-int client_connections_socket;
 int serverRM_online = FALSE;
+int sockfd = 0;
 
 pthread_t reconnect_tid;
 pthread_t message_consumer_tid;
@@ -74,7 +74,10 @@ int main(int argc, char *argv[])
 {
     // Sockets Address Config
     struct sockaddr_in serv_addr, client_addr;
-    int port;
+    int port = 0;
+
+    // Variables used below to connect to the incoming client connections
+    socklen_t clilen = sizeof(struct sockaddr_in);
 
     handle_signals();
 
@@ -82,7 +85,7 @@ int main(int argc, char *argv[])
     pthread_create(&reconnect_tid, NULL, (void *(*)(void *)) & keep_server_connection, NULL);
 
     // Creating this socket
-    int sockfd = socket_create();
+    sockfd = socket_create();
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -118,24 +121,21 @@ int main(int argc, char *argv[])
 
     logger_info("Listening on port %d...\n", port);
 
-    // Incoming message listener
-    pthread_create(&message_consumer_tid, NULL, (void *(*)(void *)) & listen_message_processor, NULL);
-
-    // Variables used below to connect to the incoming client connections
-    socklen_t clilen = sizeof(struct sockaddr_in);
-    struct sockaddr_in cli_addr;
+    // Incoming message listener ---> está dando seg fault do nada
+    //pthread_create(&message_consumer_tid, NULL, (void *(*)(void *)) & listen_message_processor, NULL);
 
     while (TRUE)
     {
         int *newsockfd = (int *)malloc(sizeof(int));
+        *newsockfd = accept(sockfd, (struct sockaddr *)&client_addr, &clilen);
 
-        if ((*newsockfd = accept(client_connections_socket, (struct sockaddr *)&cli_addr, &clilen)) < 0)
+        if (*newsockfd == -1)
         {
             logger_error("When accepting client connection\n");
             cleanup(ERROR_ACCEPT);
         }
 
-        logger_info("New Client connection from %s:%d\n", inet_ntoa(cli_addr.sin_addr), cli_addr.sin_port);
+        logger_info("New Client connection from %s:%d\n", inet_ntoa(client_addr.sin_addr), client_addr.sin_port);
 
         pthread_t *thread = (pthread_t *)malloc(sizeof(pthread_t));
         pthread_create(thread, NULL, (void *(*)(void *)) & listen_client_connection, (void *)newsockfd);
@@ -197,7 +197,7 @@ int handle_server_connection(struct sockaddr_in *serv_addr)
     return 0;
 }
 
-void *listen_server_connection(void *sockfd)
+void *listen_server_connection(void *void_sockfd)
 {
     NOTIFICATION notification;
     int is_server_connected = TRUE;
@@ -394,7 +394,7 @@ void *listen_message_processor(void *_)
     }
 }
 
-void *listen_client_connection(void *sockfd)
+void *listen_client_connection(void *void_sockfd)
 {
     char username[MAX_USERNAME_LENGTH];
 
@@ -402,7 +402,8 @@ void *listen_client_connection(void *sockfd)
     int known_user_ID = FALSE;
     int is_client_connected = TRUE;
     int bytes_read;
-
+    int sockfd = *((int *)void_sockfd);
+    
     while (is_client_connected)
     {
         bzero((void *)&notification, sizeof(NOTIFICATION));
@@ -462,10 +463,9 @@ void process_client_message(NOTIFICATION *notification)
 void send_server(NOTIFICATION *notification)
 {
     int status;
-
     do
     {
-        status = send_notification(notification, ring->primary_fd);
+      status = send_notification(notification, ring->primary_fd);
     } while (status < 0);
 }
 
