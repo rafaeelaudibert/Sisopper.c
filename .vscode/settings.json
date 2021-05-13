@@ -15,6 +15,9 @@
         "types.h": "c",
         "stdio.h": "c",
         "notification.h": "c",
-        "front_end.h": "c"
+        "front_end.h": "c",
+        "netdb.h": "c",
+        "user.h": "c",
+        "savefile.h": "c"
     }
 }

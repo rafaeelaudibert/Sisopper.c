@@ -18,7 +18,7 @@ extern int errno;
 
 #define LOCK(mutex) pthread_mutex_lock(&mutex)
 #define UNLOCK(mutex) pthread_mutex_unlock(&mutex)
-#define max(x,y) (((x) >= (y)) ? (x) : (y))
+#define max(x, y) (((x) >= (y)) ? (x) : (y))
 
 int AVAILABLE_PORTS[] = {12550, 12551, 12552, 12553, 12554, 12555, 12556, 12557, 12558, 12559};
 char *AVAILABLE_HOSTS[] = {
@@ -303,9 +303,11 @@ void server_ring_connect_with_next_server(SERVER_RING *ring, int sockfd)
     ring->next_index = ring->self_index;
     do
     {
+        perror("server_ring_connect_with_next_server");
         ring->next_index = server_ring_get_next_index(ring, ring->next_index);
         next_addr.sin_port = htons(ring->server_ring_ports[ring->next_index]);
         struct hostent *in_addr = gethostbyname(ring->server_ring_addresses[ring->next_index]);
         next_addr.sin_addr = *((struct in_addr *)in_addr->h_addr);
+        logger_debug("Trying to connect to %s:%d\n", ring->server_ring_addresses[ring->next_index], ring->server_ring_ports[ring->next_index]);
     } while (ring->next_index != ring->self_index && (connect(sockfd, (struct sockaddr *)&next_addr, sizeof(next_addr)) < 0));
 }
