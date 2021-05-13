@@ -36,7 +36,7 @@ void handle_connection_leader_question(int);
 void handle_connection_keepalive(int);
 void handle_connection_election(NOTIFICATION *, int sockfd);
 void handle_connection_elected(NOTIFICATION *);
-void handle_follow_replication(NOTIFICATION *, int);
+void handle_replication(NOTIFICATION *);
 void close_socket(void *);
 void cancel_thread(void *);
 void sigint_handler(int);
@@ -49,7 +49,7 @@ void receive_message(NOTIFICATION *, USER *);
 void follow_user(NOTIFICATION *, USER *);
 void print_username(void *);
 void send_message(NOTIFICATION *);
-boolean send_follow_replication(void);
+void send_replication(NOTIFICATION *);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
@@ -249,7 +249,6 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
     {
         USER *user = (USER *)followed_user_node->value;
         char *dup_current_user_username = strdup(current_user->username);
-        boolean replication_succeed = FALSE;
 
         // Lock because we are possibly going to play around with follow list
         LOCK(user->mutex);
@@ -273,23 +272,7 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
             char *info_message = (char *)calloc(220, sizeof(char));
             
             // Agreement:
-            replication_succeed = send_follow_replication();
-            if ( replication_succeed ) {
-                sprintf(info_message, "The user '%s' was followed!", user_to_follow_username);
-            } else {
-                sprintf(info_message, "The user '%s' could not be followed!", user_to_follow_username);
-                // It should rollback
-            }
-
-            NOTIFICATION notification = {
-                .command = (COMMAND) NULL,
-                .id = GLOBAL_NOTIFICATION_ID++,
-                .timestamp = time(NULL),
-                .type = NOTIFICATION_TYPE__INFO,
-                .receiver = current_user->username};
-            strcpy(notification.message, info_message);
-
-            send_message(&notification);
+            send_replication(follow_notification);
         }
         else
         {
@@ -443,9 +426,9 @@ void *handle_connection(void *void_sockfd)
         logger_info("[Socket %d] Received connection with ELECTED type\n", sockfd);
         handle_connection_elected(&notification);
         break;
-    case NOTIFICATION_TYPE__FOLLOW_REPLICATION:
-        logger_info("[Socket %d] Received connection with FOLLOW_REPLICATION type\n", sockfd);
-        handle_follow_replication(&notification, sockfd);
+    case NOTIFICATION_TYPE__REPLICATION:
+        logger_info("[Socket %d] Received connection with REPLICATION type\n", sockfd);
+        handle_replication(&notification);
         break;
     default:
         logger_info("[Socket %d] Unhandable connection with %d type\n", sockfd, notification.type);
@@ -545,49 +528,63 @@ void handle_connection_leader_question(int sockfd)
         logger_error("[Socket %d] When sending primary idx (%d) back on request\n", sockfd, server_ring->primary_idx);
 }
 
-void handle_follow_replication(NOTIFICATION *notification, int sockfd)
-{   if (notification->data == 1) {   
-        user_hash_table = read_savefile();
-        logger_info("Updated follow state");
-
-        if (server_ring->server_ring_ports[server_ring->primary_idx] == server_ring->server_ring_ports[server_ring->next_index])
-        { // Should stop replication
-            NOTIFICATION notification = {.type = NOTIFICATION_TYPE__FOLLOW_REPLICATION, .data = 0};
-            write(sockfd, &notification, sizeof(NOTIFICATION));
+void handle_replication(NOTIFICATION *notification)
+{   
+    if (notification->command == FOLLOW) {
+        if (notification->data == 1)
+        {
+            user_hash_table = read_savefile();
+            logger_info("Updated follow state");
+            send_replication(notification);
         }
-        else {
-            NOTIFICATION send_continue = {.type = NOTIFICATION_TYPE__FOLLOW_REPLICATION, .data = 1};
-            write(sockfd, &send_continue, sizeof(NOTIFICATION));
+        if (notification->data == 0)
+        {
+            // Response after Agreement:
+            NOTIFICATION response = {
+                .command = (COMMAND) NULL,
+                .id = GLOBAL_NOTIFICATION_ID++,
+                .timestamp = time(NULL),
+                .type = NOTIFICATION_TYPE__INFO,
+            };
+            strcpy(response.message, notification->message);
+            strcpy(response.receiver, notification->receiver);
+            send_message(&notification);
         }
     }
 }
 
-boolean send_follow_replication(void)
-{
+void send_replication(NOTIFICATION *original)
+{   
+    int keep_replicating = 1;
     // Creating and configuring sockfd for the keepalive
     int sockfd = socket_create();
     server_ring_connect_with_next_server(server_ring, sockfd);
 
-    NOTIFICATION response;
-    // TO DO: for each backup server, it must be sent
+    if (server_ring->server_ring_ports[server_ring->primary_idx] == server_ring->server_ring_ports[server_ring->next_index])
+    { // Should stop replication on next connection
+        keep_replicating = 0;
+    }
+
     NOTIFICATION notification = {
-        .type = NOTIFICATION_TYPE__FOLLOW_REPLICATION, 
-        .data = 1
+        .type = NOTIFICATION_TYPE__REPLICATION,
+        .command = original->command,
+        .data = keep_replicating,
+        .id = original->id,
+        .timestamp = original->timestamp,
     };
+    strcpy(notification.author, original->author);
+    strcpy(notification.message, original->message);
+    strcpy(notification.receiver, original->receiver);
+
+
     int bytes_wrote = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
     if (bytes_wrote < 0)
     {
-        logger_error("Error when trying to send next election message.\n");
-        exit(ERROR_LOOKING_FOR_LEADER);
+        logger_error("Error when trying to send next replication message.\n");
+        exit(ERROR_REPLICATING);
     }
 
-    write(sockfd, &notification, sizeof(NOTIFICATION));
-    sleep(1);
-    int bytes_read = read(sockfd, (void *)&response, sizeof(NOTIFICATION));
-    if (bytes_read < 0 || response.data != 0)
-        return FALSE;
-
-    return TRUE;
+    close(sockfd);
 }  
 
 
