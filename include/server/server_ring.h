@@ -18,6 +18,7 @@ typedef struct server_ring
 
     int is_primary;
     int primary_idx;
+    int primary_fd;
 
     int keepalive_fd;
     pthread_t keepalive_tid;
