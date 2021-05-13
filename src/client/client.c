@@ -146,12 +146,10 @@ int main(int argc, char *argv[])
     }
 
     NOTIFICATION notification = {
-        .command = (COMMAND) NULL,
+        .command = (COMMAND)NULL,
         .id = ++MESSAGE_GLOBAL_ID,
         .timestamp = time(NULL),
-        .type = NOTIFICATION_TYPE__LOGIN,
-        .receiver = NULL,
-        .message = NULL};
+        .type = NOTIFICATION_TYPE__LOGIN};
     strcpy(notification.author, user_handle);
 
     bytes_read = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
@@ -220,8 +218,7 @@ int main(int argc, char *argv[])
             .command = command,
             .id = ++MESSAGE_GLOBAL_ID,
             .timestamp = time(NULL),
-            .type = NOTIFICATION_TYPE__MESSAGE,
-            .receiver = NULL};
+            .type = NOTIFICATION_TYPE__MESSAGE};
         strcpy(notification.author, user_handle);
         strcpy(notification.message, buffer);
 

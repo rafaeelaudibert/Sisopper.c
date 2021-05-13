@@ -215,12 +215,12 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
         logger_warn("User tried following itself, won't work!\n");
 
         NOTIFICATION notification = {
-            .command = (COMMAND) NULL,
+            .command = (COMMAND)NULL,
             .id = GLOBAL_NOTIFICATION_ID++,
             .timestamp = time(NULL),
             .message = "User tried following itself. This is not allowed.",
-            .type = NOTIFICATION_TYPE__INFO,
-            .receiver = current_user->username};
+            .type = NOTIFICATION_TYPE__INFO};
+        strcpy(notification.receiver, current_user->username);
 
         send_message(&notification);
 
@@ -237,11 +237,11 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
         sprintf(error_message, "Could not follow the user %s. It doesn't exist", user_to_follow_username);
 
         NOTIFICATION notification = {
-            .command = (COMMAND) NULL,
+            .command = (COMMAND)NULL,
             .id = GLOBAL_NOTIFICATION_ID++,
             .timestamp = time(NULL),
-            .type = NOTIFICATION_TYPE__INFO,
-            .receiver = current_user->username};
+            .type = NOTIFICATION_TYPE__INFO};
+        strcpy(notification.receiver, current_user->username);
         strcpy(notification.message, error_message);
 
         send_message(&notification);
@@ -287,12 +287,12 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
             sprintf(error_message, "The user '%s' already follows '%s'", current_user->username, user_to_follow_username);
 
             NOTIFICATION notification = {
-                .command = (COMMAND) NULL,
+                .command = (COMMAND)NULL,
                 .id = GLOBAL_NOTIFICATION_ID++,
                 .timestamp = time(NULL),
-                .type = NOTIFICATION_TYPE__INFO,
-                .receiver = current_user->username};
+                .type = NOTIFICATION_TYPE__INFO};
             strcpy(notification.message, error_message);
+            strcpy(notification.receiver, current_user->username);
 
             send_message(&notification);
 
@@ -575,7 +575,7 @@ void handle_replication(NOTIFICATION *notification)
             };
             strcpy(response.message, notification->message);
             strcpy(response.receiver, notification->receiver);
-            send_message(&notification);
+            send_message(notification);
         }
     }
     if (notification->command == SEND) {

@@ -55,11 +55,14 @@ pthread_mutex_t MUTEX_CONSUMER = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_MESSAGE_QUEUE = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_APPEND_LIST = PTHREAD_MUTEX_INITIALIZER;
 
+void cancel_thread(void *);
+void close_socket(void *);
 void sigint_handler(int);
 void handle_signals(void);
 int handle_server_connection(struct sockaddr_in *);
 void *listen_server_connection(void *);
 void *keep_server_connection(void *);
+void keep_alive_with_server(void);
 void *listen_message_processor(void *);
 void *listen_client_connection(void *);
 void process_client_message(NOTIFICATION *);
@@ -174,20 +177,20 @@ void handle_signals()
 
 int handle_server_connection(struct sockaddr_in *serv_addr)
 {
-    socklen_t socklen = sizeof(struct sockaddr_in);
+    socklen_t socklen = sizeof(*serv_addr);
 
-    if (connect(ring->primary_fd, (struct sockaddr *)serv_addr, &socklen) < 0)
+    if (connect(ring->primary_fd, (struct sockaddr *)serv_addr, socklen) < 0)
     {
         logger_error("When accepting connection\n");
         UNLOCK(MUTEX_RECONNECT);
         return -1;
     }
 
-    pthread_t *listen_connection_tid;
+    pthread_t listen_connection_tid;
 
     // Thread to communicate with server
-    pthread_create(listen_connection_tid, NULL, (void *(*)(void *)) & listen_server_connection, (void *)ring->primary_fd);
-    logger_debug("Created new thread %ld to handle this connection\n", *listen_connection_tid);
+    pthread_create(&listen_connection_tid, NULL, (void *(*)(void *)) & listen_server_connection, (void *)&ring->primary_fd);
+    logger_debug("Created new thread %ld to handle this connection\n", listen_connection_tid);
     // TODO add to thread list
 
     LOCK(MUTEX_APPEND_LIST);
@@ -244,6 +247,8 @@ void *listen_server_connection(void *void_sockfd)
             break;
         }
     }
+
+    return NULL;
 }
 
 SERVER_RING *connect_to_leader()
@@ -314,7 +319,6 @@ SERVER_RING *connect_to_leader()
 
 void keep_alive_with_server()
 {
-    pthread_t tid;
     ring->keepalive_fd = socket_create();
 
     struct sockaddr_in keepalive_addr;
@@ -399,11 +403,10 @@ void *listen_client_connection(void *void_sockfd)
     char username[MAX_USERNAME_LENGTH];
 
     NOTIFICATION notification;
-    int known_user_ID = FALSE;
     int is_client_connected = TRUE;
     int bytes_read;
     int sockfd = *((int *)void_sockfd);
-    
+
     while (is_client_connected)
     {
         bzero((void *)&notification, sizeof(NOTIFICATION));
@@ -428,7 +431,6 @@ void *listen_client_connection(void *void_sockfd)
         case NOTIFICATION_TYPE__LOGIN:
             logger_info("Received login attempt from client: %s\n", notification.author);
             strcpy(username, notification.author);
-            known_user_ID = TRUE;
             process_client_message(&notification);
             break;
 
@@ -443,11 +445,13 @@ void *listen_client_connection(void *void_sockfd)
         }
     }
 
-    //if (known_user_ID)
-        //TODO
-        //disconnectUser(username);
+    //if (known_user_ID) // Should be set on LOGIN
+    //TODO
+    //disconnectUser(username);
     //TODO
     //handle_socket_disconnection(sockfd);
+
+    return NULL;
 }
 
 void process_client_message(NOTIFICATION *notification)
@@ -465,7 +469,7 @@ void send_server(NOTIFICATION *notification)
     int status;
     do
     {
-      status = send_notification(notification, ring->primary_fd);
+        status = send_notification(notification, ring->primary_fd);
     } while (status < 0);
 }
 
