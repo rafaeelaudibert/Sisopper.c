@@ -37,6 +37,7 @@ void handle_connection_keepalive(int);
 void handle_connection_election(NOTIFICATION *, int sockfd);
 void handle_connection_elected(NOTIFICATION *);
 void handle_replication(NOTIFICATION *);
+void handle_wipe_replication(NOTIFICATION *);
 void close_socket(void *);
 void cancel_thread(void *);
 void sigint_handler(int);
@@ -607,7 +608,7 @@ void send_wipe_pending_notification(char *receiver, int socket)
 
 }
 
-void handle_wipe_replicate(NOTIFICATION *notification)
+void handle_wipe_replication(NOTIFICATION *notification)
 {
 
     if (notification->command == SEND) {
