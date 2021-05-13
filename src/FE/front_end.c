@@ -261,7 +261,7 @@ SERVER_RING *connect_to_leader()
         // Sleep for some seconds before trying to find again
         sleep(1);
 
-        ring->self_index = 0; // To go around everything
+        ring->self_index = -5; // To not collision inside the next function and to go around everything
         server_ring_connect_with_next_server(ring, sockfd);
 
         // Finally found someone, so can ask for the leader
@@ -272,14 +272,14 @@ SERVER_RING *connect_to_leader()
             logger_info("Will try to find which is the primary port\n");
 
             NOTIFICATION notification = {.type = NOTIFICATION_TYPE__LEADER_QUESTION};
-            int bytes_wrote = write(ring->next_sockfd, (void *)&notification, sizeof(NOTIFICATION));
+            int bytes_wrote = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
             if (bytes_wrote < 0)
             {
                 logger_error("Error when trying to sending message to find who is the current leader. Will retry with another ring search...\n");
                 continue;
             }
 
-            int bytes_read = read(ring->next_sockfd, (void *)&notification, sizeof(NOTIFICATION));
+            int bytes_read = read(sockfd, (void *)&notification, sizeof(NOTIFICATION));
             if (bytes_read < 0)
             {
                 logger_error("Error when trying to receive message to find who is the current leader. Will retry with another ring search...\n");
@@ -294,7 +294,7 @@ SERVER_RING *connect_to_leader()
             ring->primary_idx = notification.data;
             logger_info("Found the primary index: %d\n", ring->primary_idx);
 
-            close(ring->next_sockfd);
+            close(sockfd);
 
             // Connect per se with the primary
             ring->primary_fd = socket_create();
@@ -314,6 +314,8 @@ SERVER_RING *connect_to_leader()
 
             return ring;
         }
+
+        logger_info("Could not find new leader. Going again in a few...\n");
     }
 }
 
@@ -376,6 +378,7 @@ void *keep_server_connection(void *_)
         else
         {
             // Reconnect with the server if we detected we are not connected anymore
+            logger_info("Not connected. Will try to connect to the leader\n");
             ring = connect_to_leader();
 
             logger_info("Connection with the main server restablished!\n");
