@@ -621,45 +621,46 @@ void send_inicial_replication(int sockfd)
 {       
     int list_idx;
     HASH_NODE *node;
-    //TODO: FIX SINTAX
-    for (int table_idx = 0; table_idx < HASH_SIZE; table_idx++)
-    {
-        for (node = user_hash_table[table_idx], list_idx = 0; node; node = node->next, list_idx++)
+    if( user_hash_table ) {
+        for (int table_idx = 0; table_idx < HASH_SIZE; table_idx++)
         {
-            USER *user = (USER *)node->value;
-            if (list_idx == 0) {
-                send_wipe_pending_notification(user->username, sockfd);
-            }
-
-            
-            CHAINED_LIST *pending_notification = user->pending_notifications;
-            while (pending_notification)
+            for (node = user_hash_table[table_idx], list_idx = 0; node; node = node->next, list_idx++)
             {
-                NOTIFICATION *notification = (NOTIFICATION *)pending_notification->val;
-
-                logger_info("[Socket %d] REPLICATION: Pending notification from %d to %d\n", sockfd, notification->author, user->username);
-                
-                NOTIFICATION copy_notification = {
-                    .type = NOTIFICATION_TYPE__REPLICATION,
-                    .command = SEND,
-                    .data = 0,
-                    .id = notification->id,
-                    .timestamp = notification->timestamp,
-                };
-                strcpy(copy_notification.author, notification->author);
-                strcpy(copy_notification.message, notification->message);
-                strcpy(copy_notification.receiver, notification->receiver);
-                int bytes_wrote = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
-                if (bytes_wrote < 0)
-                {
-                    logger_error("Error when trying to send next replication message.\n");
-                    exit(ERROR_REPLICATING);
+                USER *user = (USER *)node->value;
+                if (list_idx == 0) {
+                    send_wipe_pending_notification(user->username, sockfd);
                 }
 
-                pending_notification = pending_notification->next;
+                CHAINED_LIST *pending_notification = user->pending_notifications;
+                while (pending_notification)
+                {
+                    NOTIFICATION *notification = (NOTIFICATION *)pending_notification->val;
+
+                    logger_info("[Socket %d] REPLICATION: Pending notification from %d to %d\n", sockfd, notification->author, user->username);
+                    
+                    NOTIFICATION copy_notification = {
+                        .type = NOTIFICATION_TYPE__REPLICATION,
+                        .command = SEND,
+                        .data = 0,
+                        .id = notification->id,
+                        .timestamp = notification->timestamp,
+                    };
+                    strcpy(copy_notification.author, notification->author);
+                    strcpy(copy_notification.message, notification->message);
+                    strcpy(copy_notification.receiver, notification->receiver);
+                    int bytes_wrote = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
+                    if (bytes_wrote < 0)
+                    {
+                        logger_error("Error when trying to send next replication message.\n");
+                        exit(ERROR_REPLICATING);
+                    }
+
+                    pending_notification = pending_notification->next;
+                }
             }
         }
     }
+    
 }
 
 void send_replication(NOTIFICATION *original)
