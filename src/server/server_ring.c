@@ -19,6 +19,7 @@ extern int errno;
 
 #define LOCK(mutex) pthread_mutex_lock(&mutex)
 #define UNLOCK(mutex) pthread_mutex_unlock(&mutex)
+#define max(x,y) (((x) >= (y)) ? (x) : (y))
 
 int AVAILABLE_PORTS[] = {12550, 12551, 12552, 12553, 12554, 12555, 12556, 12557, 12558, 12559};
 char *AVAILABLE_HOSTS[] = {
