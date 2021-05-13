@@ -15,7 +15,6 @@
 #include "chained_list.h"
 #include "exit_errors.h"
 #include "logger.h"
-#include "packet.h"
 #include "user.h"
 #include "hash.h"
 #include "notification.h"
@@ -47,8 +46,8 @@ void *handle_eof(void *);
 void cleanup(int);
 USER *login_user(int, char *);
 void process_message(void *);
-void receive_message(PACKET *, USER *);
-void follow_user(PACKET *, USER *);
+void receive_message(NOTIFICATION *, USER *);
+void follow_user(NOTIFICATION *, USER *);
 void print_username(void *);
 void send_message(NOTIFICATION *);
 
@@ -72,7 +71,7 @@ unsigned long long GLOBAL_NOTIFICATION_ID = 0;
 
 typedef struct
 {
-    PACKET *packet;
+    NOTIFICATION *notification;
     USER *user;
 } MESSAGE_TO_PROCESS;
 
@@ -204,15 +203,16 @@ void print_username(void *void_parameter)
     printf("%s", parameter);
 }
 
-void follow_user(PACKET *packet, USER *current_user)
+void follow_user(NOTIFICATION *follow_notification, USER *current_user)
 {
-    char *user_to_follow_username = packet->payload;
+    char *user_to_follow_username = follow_notification->message;
 
     if (strcmp(user_to_follow_username, current_user->username) == 0)
     {
         logger_warn("User tried following itself, won't work!\n");
 
         NOTIFICATION notification = {
+            .command = NULL,
             .id = GLOBAL_NOTIFICATION_ID++,
             .timestamp = time(NULL),
             .message = "User tried following itself. This is not allowed.",
@@ -234,6 +234,7 @@ void follow_user(PACKET *packet, USER *current_user)
         sprintf(error_message, "Could not follow the user %s. It doesn't exist", user_to_follow_username);
 
         NOTIFICATION notification = {
+            .command = NULL,
             .id = GLOBAL_NOTIFICATION_ID++,
             .timestamp = time(NULL),
             .type = NOTIFICATION_TYPE__INFO,
@@ -269,6 +270,7 @@ void follow_user(PACKET *packet, USER *current_user)
             sprintf(info_message, "The user '%s' was followed!", user_to_follow_username);
 
             NOTIFICATION notification = {
+                .command = NULL,
                 .id = GLOBAL_NOTIFICATION_ID++,
                 .timestamp = time(NULL),
                 .type = NOTIFICATION_TYPE__INFO,
@@ -283,6 +285,7 @@ void follow_user(PACKET *packet, USER *current_user)
             sprintf(error_message, "The user '%s' already follows '%s'", current_user->username, user_to_follow_username);
 
             NOTIFICATION notification = {
+                .command = NULL,
                 .id = GLOBAL_NOTIFICATION_ID++,
                 .timestamp = time(NULL),
                 .type = NOTIFICATION_TYPE__INFO,
@@ -303,26 +306,26 @@ void follow_user(PACKET *packet, USER *current_user)
 void process_message(void *void_message_to_process)
 {
     MESSAGE_TO_PROCESS *message_to_process = (MESSAGE_TO_PROCESS *)void_message_to_process;
-    if (message_to_process->packet->command == FOLLOW)
+    if (message_to_process->notification->command == FOLLOW)
     {
-        logger_info("Following user: %s\n", message_to_process->packet->payload);
-        follow_user(message_to_process->packet, message_to_process->user);
+        logger_info("Following user: %s\n", message_to_process->notification->message);
+        follow_user(message_to_process->notification, message_to_process->user);
     }
-    else if (message_to_process->packet->command == SEND)
+    else if (message_to_process->notification->command == SEND)
     {
-        logger_info("Received message: %s\n", message_to_process->packet->payload);
-        receive_message(message_to_process->packet, message_to_process->user);
+        logger_info("Received message: %s\n", message_to_process->notification->message);
+        receive_message(message_to_process->notification, message_to_process->user);
     }
 }
 
-void receive_message(PACKET *packet, USER *current_user)
+void receive_message(NOTIFICATION *receive_notification, USER *current_user)
 {
     NOTIFICATION *notification = (NOTIFICATION *)calloc(1, sizeof(NOTIFICATION));
     strcpy(notification->author, current_user->username);
     strcpy(notification->receiver, current_user->username);
-    strcpy(notification->message, packet->payload);
+    strcpy(notification->message, receive_notification->message);
     notification->id = GLOBAL_NOTIFICATION_ID++;
-    notification->timestamp = packet->timestamp;
+    notification->timestamp = receive_notification->timestamp;
     notification->type = NOTIFICATION_TYPE__MESSAGE;
 
     LOCK(MUTEX_FOLLOW);
@@ -373,7 +376,7 @@ void send_message(NOTIFICATION *notification)
     }
     else
     {
-        logger_info("Added notification %ld with message '%s' to be sent later to %s\n", notification->id, notification->message, username);
+        logger_info("Added notification %ld with message '%s' to be sent later to %s\n", notification->id, notification->message, user->username);
         // Add to the notifications which must be sent to this user later on
         LOCK(MUTEX_PENDING_NOTIFICATIONS);
         user->pending_notifications = chained_list_append_end(user->pending_notifications, (void *)notification);
@@ -434,7 +437,7 @@ void *handle_connection(void *void_sockfd)
 void handle_connection_login(int sockfd, NOTIFICATION *notification)
 {
 
-    PACKET packet;
+    NOTIFICATION new_notification;
     USER *current_user = login_user(sockfd, notification->author);
     boolean can_login = current_user != NULL;
 
@@ -469,10 +472,10 @@ void handle_connection_login(int sockfd, NOTIFICATION *notification)
 
     while (1)
     {
-        bzero((void *)&packet, sizeof(PACKET));
+        bzero((void *)&new_notification, sizeof(NOTIFICATION));
 
         /* read from the socket */
-        bytes_read = read(sockfd, (void *)&packet, sizeof(PACKET));
+        bytes_read = read(sockfd, (void *)&new_notification, sizeof(NOTIFICATION));
         if (bytes_read < 0)
         {
             logger_error("[Socket %d] When reading from socket\n", sockfd);
@@ -500,15 +503,15 @@ void handle_connection_login(int sockfd, NOTIFICATION *notification)
             pthread_t tid;
 
             // Create copy to pass to the other thread and not be overriden
-            PACKET *packet_copy = (PACKET *)calloc(1, sizeof(PACKET));
-            memcpy(packet_copy, &packet, sizeof(PACKET));
-            logger_info("[Socket %d] Here is the message: %s\n", sockfd, packet_copy->payload);
+            NOTIFICATION *notification_copy = (NOTIFICATION *)calloc(1, sizeof(NOTIFICATION));
+            memcpy(notification_copy, &notification, sizeof(NOTIFICATION));
+            logger_info("[Socket %d] Here is the message: %s\n", sockfd, notification_copy->message);
 
             MESSAGE_TO_PROCESS *message_to_process = (MESSAGE_TO_PROCESS *)calloc(1, sizeof(MESSAGE_TO_PROCESS));
-            message_to_process->packet = packet_copy;
+            message_to_process->notification = notification_copy;
             message_to_process->user = current_user;
             pthread_create(&tid, NULL, (void *(*)(void *)) & process_message, (void *)message_to_process);
-            logger_info("[Socket %d] Proccessing message %d on brand new thread %ld\n", sockfd, packet_copy->seqn, tid);
+            logger_info("[Socket %d] Proccessing message %d on brand new thread %ld\n", sockfd, notification_copy->id, tid);
         }
     };
 }
