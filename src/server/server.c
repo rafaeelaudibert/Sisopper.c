@@ -85,7 +85,7 @@ typedef struct
 
 int main(int argc, char *argv[])
 {
-    
+
     logger_debug("Initializing on debug mode!\n");
 
     handle_signals();
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 void cleanup(int exit_code)
 {
     save_savefile(user_hash_table);
-    
+
     chained_list_iterate(chained_list_threads, &cancel_thread);
     chained_list_iterate(chained_list_sockets_fd, &close_socket);
     chained_list_free(chained_list_threads);
@@ -264,7 +264,7 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
             strcpy(follow_notification->message, info_message);
 
             // Sending for agreement and response after all:
-            if(server_ring->is_primary)
+            if (server_ring->is_primary)
             {
                 send_replication(follow_notification);
             }
@@ -386,7 +386,8 @@ void *handle_connection(void *void_sockfd)
     switch (notification.type)
     {
     case NOTIFICATION_TYPE__FE_CONNECTION:
-        if (server_ring->is_primary) {
+        if (server_ring->is_primary)
+        {
             logger_info("[Socket %d] Received connection with FE_CONNECTION type.\n", sockfd);
             handle_connection_fe(sockfd, &notification);
             break;
@@ -448,9 +449,9 @@ void handle_pending_notifications(USER *current_user, int sockfd, int send)
 {
     // Do not allow to add any new notification while we haven't sent the others
     LOCK(MUTEX_PENDING_NOTIFICATIONS);
-    if (send) 
+    if (send)
     {
-        
+
         send_pending_notifications(current_user, sockfd);
     }
     // We have sent them all, so we can clean it
@@ -461,10 +462,11 @@ void handle_pending_notifications(USER *current_user, int sockfd, int send)
 void handle_connection_login(int sockfd, NOTIFICATION *notification)
 {
     USER *current_user = login_user(notification->author);
-    
+
     handle_pending_notifications(current_user, sockfd, server_ring->is_primary);
 
-    if (server_ring->is_primary){
+    if (server_ring->is_primary)
+    {
         logger_debug("Sending LOGIN replication.");
         send_replication(notification);
     }
@@ -479,22 +481,27 @@ void handle_connection_leader_question(int sockfd)
 }
 
 void handle_replication(NOTIFICATION *notification)
-{   
+{
     if (notification->command == LOGIN)
     {
-        if (!server_ring->is_primary){
+        if (!server_ring->is_primary)
+        {
             handle_connection_login(0, notification);
             send_replication(notification);
         }
-    } else if (notification->command == LOGOUT)
+    }
+    else if (notification->command == LOGOUT)
     {
         if (!server_ring->is_primary)
             logout_user(notification->author);
-    } else {
+    }
+    else
+    {
         HASH_NODE *node = hash_find(user_hash_table, notification->receiver);
         // Gets the user and lock its mutex
         USER *user = (USER *)node->value;
-        if (notification->command == FOLLOW) {
+        if (notification->command == FOLLOW)
+        {
             if (notification->data == 1)
             {
                 LOCK(user->mutex); // Because we will modify lists
@@ -512,7 +519,7 @@ void handle_replication(NOTIFICATION *notification)
             {
                 // Response after Agreement:
                 NOTIFICATION response = {
-                    .command = (COMMAND) NULL,
+                    .command = (COMMAND)NULL,
                     .id = GLOBAL_NOTIFICATION_ID++,
                     .timestamp = time(NULL),
                     .type = NOTIFICATION_TYPE__INFO,
@@ -522,9 +529,10 @@ void handle_replication(NOTIFICATION *notification)
                 send_message(notification);
             }
         }
-        if (notification->command == SEND) {
-            if(notification->data == 1)
-            {  
+        if (notification->command == SEND)
+        {
+            if (notification->data == 1)
+            {
                 LOCK(user->mutex);
                 LOCK(MUTEX_PENDING_NOTIFICATIONS);
                 logger_info("Added notification %ld with message '%s' to be sent later to %s\n", notification->id, notification->message, user->username);
@@ -538,10 +546,11 @@ void handle_replication(NOTIFICATION *notification)
 }
 
 void send_initial_replication(int sockfd)
-{       
+{
     int list_idx;
     HASH_NODE *node;
-    if( user_hash_table ) {
+    if (user_hash_table)
+    {
         for (int table_idx = 0; table_idx < HASH_SIZE; table_idx++)
         {
             for (node = user_hash_table[table_idx], list_idx = 0; node; node = node->next, list_idx++)
@@ -572,11 +581,10 @@ void send_initial_replication(int sockfd)
             }
         }
     }
-    
 }
 
 void send_replication(NOTIFICATION *original)
-{   
+{
     int keep_replicating = 1;
     // Creating and configuring sockfd for the keepalive
     int sockfd = socket_create();
@@ -607,7 +615,7 @@ void send_replication(NOTIFICATION *original)
     }
 
     close(sockfd);
-}  
+}
 
 void handle_connection_election(NOTIFICATION *notification, int origin_sockfd)
 {
@@ -822,10 +830,10 @@ void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
         case NOTIFICATION_TYPE__LOGOUT:
             logger_info("[Socket %d] Received connection with LOGOUT type\n", sockfd);
             logout_user(notification.author);
-            if (server_ring->is_primary){
+            if (server_ring->is_primary)
+            {
                 send_replication(&notification);
             }
-            return;
             break;
         case NOTIFICATION_TYPE__MESSAGE:
             logger_info("MESSAGE from author %s and other things %d %s\n", notification.author, notification.command, notification.receiver);
@@ -838,6 +846,7 @@ void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
             break;
         }
     }
+
     close(sockfd);
 }
 
