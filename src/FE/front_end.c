@@ -513,6 +513,7 @@ void *listen_client_connection(void *void_sockfd)
     // Tell server that this guy logged in
     NOTIFICATION *user_login = (NOTIFICATION *)malloc(sizeof(NOTIFICATION));
     user_login->type = NOTIFICATION_TYPE__LOGIN;
+    user_login->command = LOGIN;
     strcpy(user_login->author, current_user->username);
     logger_info("Sending NOTIFICATION_TYPE__LOGIN to server with username %s\n", user_login->author);
 
@@ -549,6 +550,7 @@ void *listen_client_connection(void *void_sockfd)
             // Tell server about this logout
             NOTIFICATION *user_logout = (NOTIFICATION *)malloc(sizeof(NOTIFICATION));
             user_logout->type = NOTIFICATION_TYPE__LOGOUT;
+            user_logout->command = LOGOUT;
             strcpy(user_logout->author, current_user->username);
             logger_info("Sending NOTIFICATION_TYPE__LOGOUT to server with username %s\n", user_logout->author);
 
