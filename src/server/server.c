@@ -34,7 +34,7 @@ static int received_sigint = FALSE;
 void *handle_connection(void *);
 void handle_connection_login(int, NOTIFICATION *);
 void handle_connection_leader_question(int);
-void handle_connection_keepalive(int);
+void handle_connection_keepalive(int, NOTIFICATION *);
 void handle_connection_election(NOTIFICATION *, int sockfd);
 void handle_connection_elected(NOTIFICATION *);
 void handle_connection_fe(int, NOTIFICATION *);
@@ -56,6 +56,9 @@ void send_replication(NOTIFICATION *);
 void handle_replication(NOTIFICATION *);
 void handle_pending_notifications(USER *current_user, int sockfd, int send);
 void send_pending_notifications(USER *current_user, int sockfd);
+
+// TODO: remove this function later after debugs
+void print_notification(NOTIFICATION *notification);
 
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
@@ -96,7 +99,9 @@ int main(int argc, char *argv[])
     socklen_t clilen = sizeof(struct sockaddr_in);
     struct sockaddr_in cli_addr;
 
-    // This loop is responsible for keep accepting new connections from clients
+    user_hash_table = hash_init();
+
+    // This loop is responsible for keeping accepting new connections from clients
     while (1)
     {
         int *newsockfd = (int *)malloc(sizeof(int));
@@ -165,6 +170,8 @@ USER *login_user(char *username)
         user->sessions_number = 1;
 
         hash_node = hash_insert(user_hash_table, username, (void *)user);
+        logger_debug("Created user on %p\n", hash_node);
+        hash_print(user_hash_table);
 
         // Need to unlock here because of early return
         UNLOCK(MUTEX_LOGIN);
@@ -197,7 +204,10 @@ void print_username(void *void_parameter)
 
 void follow_user(NOTIFICATION *follow_notification, USER *current_user)
 {
-    char *user_to_follow_username = follow_notification->message;
+    char *user_to_follow_username = strdup(follow_notification->message);
+    strcpy(follow_notification->receiver, current_user->username);
+    strcpy(follow_notification->target, follow_notification->message);
+    print_notification(follow_notification);
 
     if (strcmp(user_to_follow_username, current_user->username) == 0)
     {
@@ -263,11 +273,9 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
             sprintf(info_message, "The user '%s' was followed!", user_to_follow_username);
             strcpy(follow_notification->message, info_message);
 
-            // Sending for agreement and response after all:
+            // Sending for agreement and response will go after every replication
             if (server_ring->is_primary)
-            {
                 send_replication(follow_notification);
-            }
         }
         else
         {
@@ -284,7 +292,7 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
 
             send_message(&notification);
 
-            logger_error(error_message);
+            logger_error("%s\n", error_message);
         }
 
         UNLOCK(user->mutex);
@@ -406,7 +414,7 @@ void *handle_connection(void *void_sockfd)
             break;
         }
 
-        handle_connection_keepalive(sockfd);
+        handle_connection_keepalive(sockfd, &notification);
         break;
     case NOTIFICATION_TYPE__ELECTION:
         logger_info("[Socket %d] Received connection with ELECTION type\n", sockfd);
@@ -480,8 +488,25 @@ void handle_connection_leader_question(int sockfd)
         logger_error("[Socket %d] When sending primary idx (%d) back on request\n", sockfd, server_ring->primary_idx);
 }
 
+void print_notification(NOTIFICATION *notification)
+{
+    logger_debug("NOTIFICATION {author: %s, command: %d, data: %d, id: %d, message: %s, receiver: %s, target: %s, timestamp: %d, type: %d}\n",
+                 notification->author,
+                 notification->command,
+                 notification->data,
+                 notification->id,
+                 notification->message,
+                 notification->receiver,
+                 notification->target,
+                 notification->timestamp,
+                 notification->type);
+}
+
 void handle_replication(NOTIFICATION *notification)
 {
+    logger_debug("🗃️🗃️🗃️ REPLICATION!");
+    print_notification(notification);
+
     if (notification->command == LOGIN)
     {
         if (!server_ring->is_primary)
@@ -489,23 +514,31 @@ void handle_replication(NOTIFICATION *notification)
             handle_connection_login(0, notification);
             send_replication(notification);
         }
+        else
+        {
+            logger_debug("Primary received back replication LOGIN. Ignoring...\n");
+        }
     }
     else if (notification->command == LOGOUT)
     {
         if (!server_ring->is_primary)
             logout_user(notification->author);
+        else
+            logger_debug("Primary received back replication LOGOUT. Ignoring...\n");
     }
     else
     {
-        HASH_NODE *node = hash_find(user_hash_table, notification->receiver);
-        // Gets the user and lock its mutex
-        USER *user = (USER *)node->value;
+
         if (notification->command == FOLLOW)
         {
             if (notification->data == 1)
             {
+                // Gets the user and lock its mutex
+                HASH_NODE *node = hash_find(user_hash_table, notification->target);
+                USER *user = (USER *)node->value;
+
                 LOCK(user->mutex); // Because we will modify lists
-                char *dup_current_user_username = strdup(user->username);
+                char *dup_current_user_username = strdup(notification->author);
                 user->followers = chained_list_append_end(user->followers, dup_current_user_username);
                 UNLOCK(user->mutex);
 
@@ -526,13 +559,17 @@ void handle_replication(NOTIFICATION *notification)
                 };
                 strcpy(response.message, notification->message);
                 strcpy(response.receiver, notification->receiver);
-                send_message(notification);
+                send_message(&response);
             }
         }
         if (notification->command == SEND)
         {
             if (notification->data == 1)
             {
+                // Gets the user and lock its mutex
+                HASH_NODE *node = hash_find(user_hash_table, notification->receiver);
+                USER *user = (USER *)node->value;
+
                 LOCK(user->mutex);
                 LOCK(MUTEX_PENDING_NOTIFICATIONS);
                 logger_info("Added notification %ld with message '%s' to be sent later to %s\n", notification->id, notification->message, user->username);
@@ -606,6 +643,7 @@ void send_replication(NOTIFICATION *original)
     strcpy(notification.author, original->author);
     strcpy(notification.message, original->message);
     strcpy(notification.receiver, original->receiver);
+    strcpy(notification.target, original->target);
 
     int bytes_wrote = write(sockfd, (void *)&notification, sizeof(NOTIFICATION));
     if (bytes_wrote < 0)
@@ -770,9 +808,10 @@ void handle_connection_elected(NOTIFICATION *notification)
     close(sockfd);
 }
 
-void handle_connection_keepalive(int sockfd)
+void handle_connection_keepalive(int sockfd, NOTIFICATION *received_notification)
 {
-    send_initial_replication(sockfd);
+    if (received_notification->data != 1)
+        send_initial_replication(sockfd);
 
     int bytes_read;
     NOTIFICATION notification = {.type = NOTIFICATION_TYPE__KEEPALIVE}, read_notification;
@@ -838,6 +877,8 @@ void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
         case NOTIFICATION_TYPE__MESSAGE:
             logger_info("MESSAGE from author %s and other things %d %s\n", notification.author, notification.command, notification.receiver);
             hash_node = hash_find(user_hash_table, notification.author);
+            hash_print(user_hash_table);
+            logger_debug("Hash node author: %p\n", hash_node);
             user = (USER *)hash_node->value;
             process_message(&notification, user);
             break;

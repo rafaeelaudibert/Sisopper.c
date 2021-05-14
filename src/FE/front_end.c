@@ -71,6 +71,21 @@ int IS_CONNECTED_TO_SERVER = FALSE;
 
 int front_end_port_idx = 0;
 
+// TODO: Remover isso pf
+void print_notification(NOTIFICATION *notification)
+{
+    logger_debug("NOTIFICATION {author: %s, command: %d, data: %d, id: %d, message: %s, receiver: %s, target: %s, timestamp: %d, type: %d}\n",
+                 notification->author,
+                 notification->command,
+                 notification->data,
+                 notification->id,
+                 notification->message,
+                 notification->receiver,
+                 notification->target,
+                 notification->timestamp,
+                 notification->type);
+}
+
 int main(int argc, char *argv[])
 {
     pthread_t reconnect_tid, listen_connection_tid;
@@ -225,6 +240,8 @@ void *listen_server_connection(void *_)
             continue;
         }
 
+        print_notification(&notification);
+
         if (notification.type != NOTIFICATION_TYPE__MESSAGE && notification.type != NOTIFICATION_TYPE__INFO)
         {
             logger_warn("Received unexpected notification type %d from server. Will just ignore it\n", notification.type);
@@ -349,7 +366,8 @@ void keep_alive_with_server()
     {
         logger_debug("Sending a keep alive to %d\n", ring->primary_idx);
 
-        NOTIFICATION notification = {.type = NOTIFICATION_TYPE__KEEPALIVE}, read_notification;
+        // Data is 0, because doesn't want to replicate back
+        NOTIFICATION notification = {.type = NOTIFICATION_TYPE__KEEPALIVE, .data = 1}, read_notification;
         int bytes_wrote = send(ring->keepalive_fd, (void *)&notification, sizeof(NOTIFICATION), MSG_NOSIGNAL);
         if (bytes_wrote < 0)
         {

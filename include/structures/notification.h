@@ -39,6 +39,7 @@ typedef struct __notification
     char author[MAX_USERNAME_LENGTH + 2];   // Nome do autor da mensagem
     int data;                               // Dados inteiros passados quando estamos usando LEADER_QUESTION, ELECTION ou ELECTED
     char receiver[MAX_USERNAME_LENGTH + 2]; // Nome do usuario que vai receber a notificação
+    char target[MAX_USERNAME_LENGTH + 2];   // Nome do usuário que essa mensagem se refere (usando para replicar FOLLOW)
 } NOTIFICATION;
 
 #endif // NOTIFICATION_H
