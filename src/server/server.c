@@ -124,6 +124,8 @@ int main(int argc, char *argv[])
 
 void cleanup(int exit_code)
 {
+    save_savefile(user_hash_table);
+    
     chained_list_iterate(chained_list_threads, &cancel_thread);
     chained_list_iterate(chained_list_sockets_fd, &close_socket);
     chained_list_free(chained_list_threads);
@@ -492,13 +494,13 @@ void handle_replication(NOTIFICATION *notification)
         HASH_NODE *node = hash_find(user_hash_table, notification->receiver);
         // Gets the user and lock its mutex
         USER *user = (USER *)node->value;
-        LOCK(user->mutex); // Because we will modify lists
-
         if (notification->command == FOLLOW) {
             if (notification->data == 1)
             {
+                LOCK(user->mutex); // Because we will modify lists
                 char *dup_current_user_username = strdup(user->username);
                 user->followers = chained_list_append_end(user->followers, dup_current_user_username);
+                UNLOCK(user->mutex);
 
                 logger_debug("New list of followers: ");
                 chained_list_print(user->followers, &print_username);
@@ -522,14 +524,16 @@ void handle_replication(NOTIFICATION *notification)
         }
         if (notification->command == SEND) {
             if(notification->data == 1)
-            {   
+            {  
+                LOCK(user->mutex);
                 LOCK(MUTEX_PENDING_NOTIFICATIONS);
                 logger_info("Added notification %ld with message '%s' to be sent later to %s\n", notification->id, notification->message, user->username);
                 user->pending_notifications = chained_list_append_end(user->pending_notifications, (void *)notification);
                 UNLOCK(MUTEX_PENDING_NOTIFICATIONS);
+                UNLOCK(user->mutex);
+                send_replication(notification);
             }
         }
-        UNLOCK(user->mutex);
     }
 }
 
