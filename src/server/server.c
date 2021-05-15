@@ -190,10 +190,15 @@ USER *login_user(char *username)
 USER *logout_user(char *username)
 {
     HASH_NODE *hash_node = hash_find(user_hash_table, username);
-    USER *user = (USER *)hash_node->value;
-    user->sessions_number--;
+    if (hash_node)
+    {
+        USER *user = (USER *)hash_node->value;
+        user->sessions_number--;
 
-    return user;
+        return user;
+    }
+
+    return NULL;
 }
 
 void print_username(void *void_parameter)
