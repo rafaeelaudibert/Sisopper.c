@@ -1,6 +1,6 @@
 # Sisopper 🐧
  
-Twitter-like application with a server and several clients communicating through UNIX sockets.
+Twitter-like application with serveral servers and several clients communicating through UNIX sockets (with some frontend applications in the middle!).
 
 ## Usage 💬
 
@@ -9,12 +9,14 @@ Also, `<ncurses.h>` is required to compile this project.
 
 ### Running the server 📁
 
-The server can be run with `bin/server` and will listen in the port `4000`
+The server can be run with `bin/server` and it will listen on the first available port
+
+### Running the frontend 🔀
+The server can be run with `bin/front_end` and it will listen on the first available port, and automatically try to connect to the server
 
 ### Running the client 📱
 
-A client can be run with `bin/client @handle` which will automatically connect to the `server` running on port `4000`
-
+A client can be run with `bin/client @handle` which will automatically connect to its corresponding `front_end`. The front_end is chosen based on an `@handle` hash
 
 ## Authors 🧙
 
