@@ -71,21 +71,6 @@ int IS_CONNECTED_TO_SERVER = FALSE;
 
 int front_end_port_idx = 0;
 
-// TODO: Remover isso pf
-void print_notification(NOTIFICATION *notification)
-{
-    logger_debug("NOTIFICATION {author: %s, command: %d, data: %d, id: %d, message: %s, receiver: %s, target: %s, timestamp: %d, type: %d}\n",
-                 notification->author,
-                 notification->command,
-                 notification->data,
-                 notification->id,
-                 notification->message,
-                 notification->receiver,
-                 notification->target,
-                 notification->timestamp,
-                 notification->type);
-}
-
 int main(int argc, char *argv[])
 {
     pthread_t reconnect_tid, listen_connection_tid;
@@ -239,8 +224,6 @@ void *listen_server_connection(void *_)
             IS_CONNECTED_TO_SERVER = FALSE;
             continue;
         }
-
-        print_notification(&notification);
 
         if (notification.type != NOTIFICATION_TYPE__MESSAGE && notification.type != NOTIFICATION_TYPE__INFO)
         {

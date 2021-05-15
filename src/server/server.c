@@ -57,9 +57,6 @@ void handle_replication(NOTIFICATION *);
 void handle_pending_notifications(USER *current_user, int sockfd, int send);
 void send_pending_notifications(USER *current_user, int sockfd);
 
-// TODO: remove this function later after debugs
-void print_notification(NOTIFICATION *notification);
-
 CHAINED_LIST *chained_list_sockets_fd = NULL;
 CHAINED_LIST *chained_list_threads = NULL;
 int sockfd = 0;
@@ -211,7 +208,6 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
     char *user_to_follow_username = strdup(follow_notification->message);
     strcpy(follow_notification->receiver, current_user->username);
     strcpy(follow_notification->target, follow_notification->message);
-    print_notification(follow_notification);
 
     if (strcmp(user_to_follow_username, current_user->username) == 0)
     {
@@ -492,25 +488,8 @@ void handle_connection_leader_question(int sockfd)
         logger_error("[Socket %d] When sending primary idx (%d) back on request\n", sockfd, server_ring->primary_idx);
 }
 
-void print_notification(NOTIFICATION *notification)
-{
-    logger_debug("NOTIFICATION {author: %s, command: %d, data: %d, id: %d, message: %s, receiver: %s, target: %s, timestamp: %d, type: %d}\n",
-                 notification->author,
-                 notification->command,
-                 notification->data,
-                 notification->id,
-                 notification->message,
-                 notification->receiver,
-                 notification->target,
-                 notification->timestamp,
-                 notification->type);
-}
-
 void handle_replication(NOTIFICATION *notification)
 {
-    logger_debug("🗃️🗃️🗃️ REPLICATION!\n");
-    print_notification(notification);
-
     if (notification->command == LOGIN)
     {
         if (!server_ring->is_primary)
@@ -887,7 +866,6 @@ void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
     HASH_NODE *hash_node;
     USER *user;
 
-    // TODO: Keep hearing from this FE any incoming message
     while (1)
     {
         NOTIFICATION notification;
