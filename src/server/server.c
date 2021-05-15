@@ -77,12 +77,6 @@ pthread_mutex_t MUTEX_PENDING_NOTIFICATIONS = PTHREAD_MUTEX_INITIALIZER;
 
 unsigned long long GLOBAL_NOTIFICATION_ID = 0;
 
-typedef struct
-{
-    NOTIFICATION *notification;
-    USER *user;
-} MESSAGE_TO_PROCESS;
-
 int main(int argc, char *argv[])
 {
 
@@ -90,13 +84,13 @@ int main(int argc, char *argv[])
 
     handle_signals();
 
+    user_hash_table = hash_init();
+
     server_ring = server_ring_initialize();
     server_ring_connect(server_ring);
 
     socklen_t clilen = sizeof(struct sockaddr_in);
     struct sockaddr_in cli_addr;
-
-    user_hash_table = hash_init();
 
     // This loop is responsible for keeping accepting new connections from clients
     while (1)
@@ -142,10 +136,8 @@ int get_free_socket_spot(int *sockets_fd)
 {
     int i;
     for (i = 0; i <= MAX_SESSIONS; i++)
-    {
         if (sockets_fd[i] == -1)
             return i;
-    }
 
     return -1;
 }
@@ -197,10 +189,9 @@ USER *logout_user(char *username)
     return NULL;
 }
 
-void print_username(void *void_parameter)
+void print_username(void *parameter)
 {
-    char *parameter = ((char *)void_parameter);
-    printf("%s", parameter);
+    printf("%s", (char *)parameter);
 }
 
 void follow_user(NOTIFICATION *follow_notification, USER *current_user)
@@ -303,15 +294,18 @@ void follow_user(NOTIFICATION *follow_notification, USER *current_user)
 
 void process_message(NOTIFICATION *notification, USER *user)
 {
-    if (notification->command == FOLLOW)
+    switch (notification->command)
     {
+    case FOLLOW:
         logger_info("Following user: %s\n", notification->message);
         follow_user(notification, user);
-    }
-    else if (notification->command == SEND)
-    {
+        break;
+    case SEND:
         logger_info("Received message: %s\n", notification->message);
         receive_message(notification, user);
+        break;
+    default:
+        break;
     }
 }
 
@@ -500,9 +494,7 @@ void handle_replication(NOTIFICATION *notification)
                 send_replication(notification);
         }
         else
-        {
             logger_debug("Primary received back replication LOGIN. Ignoring...\n");
-        }
     }
     else if (notification->command == LOGOUT)
     {
@@ -888,9 +880,7 @@ void handle_connection_fe(int sockfd, NOTIFICATION *connection_notification)
             logger_info("[Socket %d] Received connection with LOGOUT type\n", sockfd);
             logout_user(notification.author);
             if (server_ring->is_primary)
-            {
                 send_replication(&notification);
-            }
             break;
         case NOTIFICATION_TYPE__MESSAGE:
             logger_info("MESSAGE from author %s and other things %d %s\n", notification.author, notification.command, notification.receiver);
@@ -933,9 +923,7 @@ void sigint_handler(int _sigint)
         received_sigint = TRUE;
     }
     else
-    {
         logger_error("Already received SIGINT... Waiting to finish cleaning up...\n");
-    }
 }
 
 void handle_signals(void)

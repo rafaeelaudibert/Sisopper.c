@@ -34,10 +34,6 @@ CHAINED_LIST *chained_list_messages = NULL;
 
 static int received_sigint = FALSE;
 
-int serverRM_socket;
-int serverRM_keepalive_socket;
-int serverRM_online = FALSE;
-
 pthread_t message_consumer_tid;
 
 unsigned long long GLOBAL_NOTIFICATION_ID = 0;
@@ -45,9 +41,6 @@ unsigned long long GLOBAL_NOTIFICATION_ID = 0;
 HASH_TABLE user_hash_table = NULL;
 
 // Mutexes
-pthread_mutex_t MUTEX_RECONNECT = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t MUTEX_ONLINE_SERVER = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t MUTEX_CONSUMER = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_MESSAGE_QUEUE = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_APPEND_LIST = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_LOGIN = PTHREAD_MUTEX_INITIALIZER;
@@ -56,14 +49,12 @@ void cancel_thread(void *);
 void close_socket(void *);
 void sigint_handler(int);
 void handle_signals(void);
-int handle_server_connection(struct sockaddr_in *);
 void *listen_server_connection(void *);
 void *keep_server_connection(void *);
 void keep_alive_with_server(void);
 void *listen_message_processor(void *);
 void *listen_client_connection(void *);
 void send_server(NOTIFICATION *);
-int send_notification(NOTIFICATION *, int);
 void cleanup(int);
 
 SERVER_RING *ring;
@@ -171,9 +162,7 @@ void sigint_handler(int _sigint)
         received_sigint = TRUE;
     }
     else
-    {
         logger_error("Already received SIGINT... Waiting to finish cleaning up...\n");
-    }
 }
 
 void handle_signals()
@@ -182,19 +171,6 @@ void handle_signals()
     sigint_action.sa_handler = sigint_handler;
     sigaction(SIGINT, &sigint_action, NULL);
     sigaction(SIGINT, &sigint_action, NULL); // Activating it twice works, so don't remove this ¯\_(ツ)_/¯
-}
-
-int handle_server_connection(struct sockaddr_in *serv_addr)
-{
-    socklen_t socklen = sizeof(*serv_addr);
-
-    if (connect(ring->primary_fd, (struct sockaddr *)serv_addr, socklen) < 0)
-    {
-        logger_error("When accepting connection\n");
-        return -1;
-    }
-
-    return 0;
 }
 
 void *listen_server_connection(void *_)
@@ -420,10 +396,8 @@ int get_free_socket_spot(int *sockets_fd)
 {
     int i;
     for (i = 0; i <= MAX_SESSIONS; i++)
-    {
         if (sockets_fd[i] == -1)
             return i;
-    }
 
     return -1;
 }
@@ -589,9 +563,7 @@ void send_server(NOTIFICATION *notification)
             sleep(1);
         }
         else
-        {
             logger_info("Sent %s (%d) message to server\n", notification->message, notification->id);
-        }
     } while (status < 0);
 }
 

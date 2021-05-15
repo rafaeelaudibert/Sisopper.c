@@ -19,11 +19,8 @@
 #include "ui.h"
 #include "front_end.h"
 
-typedef int boolean;
 #define FALSE 0
 #define TRUE 1
-
-static int received_sigint = FALSE;
 
 long long MESSAGE_GLOBAL_ID = 0;
 
@@ -31,42 +28,22 @@ pthread_t read_thread_tid = -1;
 int sockfd = -1;
 
 void *handle_read(void *);
-void handle_signals(void);
-void sigint_handler(int);
+COMMAND identify_command(char *);
+char *remove_command_from_message(int, char *);
 void cleanup(int);
-
-COMMAND identify_command(char *message)
-{
-    if (strncmp(message, "SEND ", NUMBER_OF_CHARS_IN_SEND) == 0)
-        return SEND;
-    if (strncmp(message, "FOLLOW ", NUMBER_OF_CHARS_IN_FOLLOW) == 0)
-        return FOLLOW;
-
-    return UNKNOWN;
-}
-
-char *remove_command_from_message(int command, char *message)
-{
-    if (command == FOLLOW)
-        message = message + NUMBER_OF_CHARS_IN_FOLLOW;
-    else if (command == SEND)
-        message = message + NUMBER_OF_CHARS_IN_SEND;
-
-    return message;
-}
 
 int main(int argc, char *argv[])
 {
     int bytes_read, command;
     struct sockaddr_in serv_addr;
 
+    srand((unsigned)time(0));
+
     if (argc < 2)
     {
         logger_info("Usage: %s <profile>\n", argv[0]);
         exit(NOT_ENOUGH_ARGUMENTS_ERROR);
     }
-
-    srand((unsigned)time(0));
 
     char *user_handle = argv[1];
     int len_handle = strlen(user_handle);
@@ -84,7 +61,6 @@ int main(int argc, char *argv[])
     UI_start(user_handle);
 
     int user_hash_idx = hash_address(user_handle) % NUMBER_OF_FES;
-
     struct hostent *server = gethostbyname(FE_HOSTS[user_hash_idx]);
     if (server == NULL)
     {
@@ -296,26 +272,24 @@ void *handle_read(void *void_sockfd)
     return NULL;
 }
 
-void handle_signals(void)
+COMMAND identify_command(char *message)
 {
-    struct sigaction sigint_action;
-    sigint_action.sa_handler = sigint_handler;
-    sigaction(SIGINT, &sigint_action, NULL);
-    sigaction(SIGINT, &sigint_action, NULL); // Activating it twice works, so don't remove this ¯\_(ツ)_/¯
+    if (strncmp(message, "SEND ", NUMBER_OF_CHARS_IN_SEND) == 0)
+        return SEND;
+    if (strncmp(message, "FOLLOW ", NUMBER_OF_CHARS_IN_FOLLOW) == 0)
+        return FOLLOW;
+
+    return UNKNOWN;
 }
 
-void sigint_handler(int _sigint)
+char *remove_command_from_message(int command, char *message)
 {
-    if (!received_sigint)
-    {
-        logger_warn("SIGINT received, closing descriptors and finishing...\n");
-        cleanup(0);
-        received_sigint = TRUE;
-    }
-    else
-    {
-        logger_error("Already received SIGINT... Waiting to finish cleaning up...\n");
-    }
+    if (command == FOLLOW)
+        message = message + NUMBER_OF_CHARS_IN_FOLLOW;
+    else if (command == SEND)
+        message = message + NUMBER_OF_CHARS_IN_SEND;
+
+    return message;
 }
 
 void cleanup(int exit_code)

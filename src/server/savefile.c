@@ -75,7 +75,6 @@ HASH_TABLE read_savefile()
 
 void save_savefile(HASH_TABLE table)
 {
-
     if (!table)
         return;
 
@@ -87,6 +86,7 @@ void save_savefile(HASH_TABLE table)
     char *username;
     CHAINED_LIST *follower_list;
     for (int table_idx = 0; table_idx < HASH_SIZE; table_idx++)
+    {
         for (node = table[table_idx], list_idx = 0; node; node = node->next, list_idx++)
         {
             user = (USER *)node->value;
@@ -104,6 +104,7 @@ void save_savefile(HASH_TABLE table)
 
             logger_info("Saved user %s to savefile...\n", username);
         }
+    }
 
     // Remember to close file
     fclose(savefile);

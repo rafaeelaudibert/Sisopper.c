@@ -34,11 +34,9 @@ char *AVAILABLE_HOSTS[] = {
     "127.0.0.1",
 };
 
-void server_ring_create_socket(SERVER_RING *);
 void server_ring_bind(SERVER_RING *);
 void server_ring_listen(SERVER_RING *ring);
 void server_ring_connect_with_ring(SERVER_RING *);
-
 void start_election(void *);
 
 SERVER_RING *server_ring_initialize(void)
@@ -287,10 +285,7 @@ void start_election(void *void_ring)
         close(sockfd);
     }
     else
-    {
-        // If it is already in an election, can just unlock it again
-        UNLOCK(ring->MUTEX_ELECTION);
-    }
+        UNLOCK(ring->MUTEX_ELECTION); // If it is already in an election, can just unlock it again
 }
 
 void server_ring_connect_with_next_server(SERVER_RING *ring, int sockfd)
